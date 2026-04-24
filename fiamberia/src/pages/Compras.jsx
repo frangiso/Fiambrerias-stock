@@ -55,8 +55,8 @@ export default function Compras() {
 
   function agregarItem() {
     if (!prodSelec) { mostrarToast('Seleccioná un producto', 'danger'); return }
-    const cant = parseFloat(cantItem.replace(',','.'))
-    const costo = parseFloat(costoItem.replace(',','.'))
+    const cant = parseFloat(String(cantItem).replace(',','.'))
+    const costo = parseFloat(String(costoItem).replace(',','.'))
     if (!cant || cant <= 0) { mostrarToast('Ingresá la cantidad', 'danger'); return }
     if (!costo || costo < 0) { mostrarToast('Ingresá el costo unitario', 'danger'); return }
     const existe = items.find(i => i.productoId === prodSelec.id)
