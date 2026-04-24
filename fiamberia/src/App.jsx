@@ -7,6 +7,7 @@ import Productos from './pages/Productos.jsx'
 import Recetas from './pages/Recetas.jsx'
 import Rubros from './pages/Rubros.jsx'
 import Caja from './pages/Caja.jsx'
+import Compras from './pages/Compras.jsx'
 import Reportes from './pages/Reportes.jsx'
 import './App.css'
 
@@ -31,6 +32,7 @@ function AppInner() {
         <div className="nav-section">Operación</div>
         <NavLink to="/" end className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🛒</span> Ventas</NavLink>
         <NavLink to="/caja" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>💰</span> Caja</NavLink>
+        <NavLink to="/compras" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🛒</span> Compras</NavLink>
         <NavLink to="/stock" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>📦</span> Stock</NavLink>
         <div className="nav-section">Gestión</div>
         <NavLink to="/productos" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>✏️</span> Productos</NavLink>
@@ -49,6 +51,7 @@ function AppInner() {
         <Routes>
           <Route path="/" element={<Ventas />} />
           <Route path="/caja" element={<Caja />} />
+          <Route path="/compras" element={<Compras />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/rubros" element={<Rubros />} />
