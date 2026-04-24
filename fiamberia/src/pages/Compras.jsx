@@ -107,15 +107,20 @@ export default function Compras() {
         total: totalCompra,
         fecha: Timestamp.now()
       })
-      // Registrar en caja como egreso
-      const cajaRef = doc(collection(db, 'caja'))
-      batch.set(cajaRef, {
-        concepto: `Compra a ${proveedor || 'proveedor'}${nroFactura ? ` — Fact. ${nroFactura}` : ''}`,
-        monto: totalCompra,
-        tipo: 'egreso',
-        subtipo: 'Compra mercadería',
-        fecha: Timestamp.now()
-      })
+      // Registrar en caja como egreso (no bloquea si la caja está cerrada)
+      try {
+        const cajaRef = doc(collection(db, 'caja'))
+        await addDoc(collection(db, 'caja'), {
+          concepto: `Compra a ${proveedor || 'proveedor'}${nroFactura ? ` — Fact. ${nroFactura}` : ''}`,
+          monto: totalCompra,
+          tipo: 'egreso',
+          subtipo: 'Compra mercadería',
+          fecha: Timestamp.now()
+        })
+      } catch(e) {
+        // Si falla el registro en caja, la compra igual se guarda
+        console.warn('No se pudo registrar en caja:', e)
+      }
       await batch.commit()
       invalidateCache('productos')
       mostrarToast('✅ Compra registrada y stock actualizado', 'success')

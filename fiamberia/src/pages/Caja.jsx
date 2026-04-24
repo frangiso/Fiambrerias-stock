@@ -40,7 +40,9 @@ export default function Caja() {
     setMovimientos(lista)
     const apertura = lista.find(m => m.tipo === 'apertura')
     setCajaAbierta(!!apertura)
-    setCajaCerrada(!!(lista.find(m => m.tipo === 'cierre')))
+    // Cerrada = último movimiento es cierre (no bloqueante para siempre)
+    const ultimo = lista[lista.length - 1]
+    setCajaCerrada(!!(ultimo && ultimo.tipo === 'cierre'))
     setSaldoApertura(apertura?.monto || 0)
     setLoading(false)
   }
@@ -110,8 +112,8 @@ export default function Caja() {
         <div style={{ display:'flex', gap:10, alignItems:'center' }}>
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
             style={{ padding:'8px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:'0.88rem' }} />
-          {!cajaAbierta && fecha === new Date().toISOString().split('T')[0] && (
-            <button className="btn btn-primary" onClick={() => setModal('apertura')}>🔓 Abrir caja</button>
+          {(!cajaAbierta || cajaCerrada) && fecha === new Date().toISOString().split('T')[0] && (
+            <button className="btn btn-primary" onClick={() => setModal('apertura')}>🔓 {cajaCerrada ? 'Reabrir caja' : 'Abrir caja'}</button>
           )}
           {cajaAbierta && !cajaCerrada && (
             <>
