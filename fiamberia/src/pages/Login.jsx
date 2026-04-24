@@ -25,7 +25,7 @@ export default function Login() {
       <div style={{ background:'white', borderRadius:20, padding:40, width:'100%', maxWidth:380, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', border:'1px solid #E2D9C8' }}>
         <div style={{ textAlign:'center', marginBottom:32 }}>
           <div style={{ fontSize:'2.5rem', marginBottom:8 }}>🥩</div>
-          <h1 style={{ fontFamily:'serif', fontSize:'1.6rem', fontWeight:800, marginBottom:4 }}>Fiambería</h1>
+          <h1 style={{ fontFamily:'serif', fontSize:'1.6rem', fontWeight:800, marginBottom:4 }}>Fiambería La Picadita</h1>
           <p style={{ color:'#8A8070', fontSize:'0.85rem' }}>Sistema de Stock y Ventas</p>
         </div>
         {error && (

@@ -95,9 +95,6 @@ export default function Stock() {
         </div>
       )}
 
-      <div className="alert alert-warning" style={{ marginBottom:16 }}>
-        💡 Para cargar mercadería y actualizar el stock usá la sección <strong>Compras</strong> — registrás la factura del proveedor y el stock se actualiza automáticamente.
-      </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
           { key: 'todos', label: `Todos (${counts.todos})` },
@@ -164,7 +161,7 @@ export default function Stock() {
                           className="btn btn-sm btn-outline"
                           onClick={() => { setModalCarga(p); setCantidadCarga('') }}
                         >
-                          Ver
+                          + Cargar
                         </button>
                       </td>
                     </tr>
