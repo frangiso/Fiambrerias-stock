@@ -54,17 +54,26 @@ export default function Compras() {
   }
 
   function agregarItem() {
-    if (!prodSelec) { mostrarToast('Seleccioná un producto', 'danger'); return }
-    const cant = parseFloat(String(cantItem).replace(',','.'))
-    const costo = parseFloat(String(costoItem).replace(',','.'))
+    // Si no hay producto seleccionado, intentar encontrarlo por nombre
+    let prod = prodSelec
+    if (!prod && busqProd.trim()) {
+      prod = productos.find(p =>
+        p.nombre.toLowerCase() === busqProd.toLowerCase() ||
+        p.nombre.toLowerCase().includes(busqProd.toLowerCase())
+      )
+      if (prod) setProdSelec(prod)
+    }
+    if (!prod) { mostrarToast('Seleccioná un producto de la lista', 'danger'); return }
+    const cant = parseFloat(String(cantItem).replace(',','.')) || 0
+    const costo = parseFloat(String(costoItem).replace(',','.')) || 0
     if (!cant || cant <= 0) { mostrarToast('Ingresá la cantidad', 'danger'); return }
-    if (!costo || costo < 0) { mostrarToast('Ingresá el costo unitario', 'danger'); return }
-    const existe = items.find(i => i.productoId === prodSelec.id)
+    if (costo < 0) { mostrarToast('El costo no puede ser negativo', 'danger'); return }
+    const existe = items.find(i => i.productoId === prod.id)
     if (existe) { mostrarToast('Ese producto ya está en la compra', 'danger'); return }
     setItems(prev => [...prev, {
-      productoId: prodSelec.id,
-      productoNombre: prodSelec.nombre,
-      unidad: prodSelec.unidad,
+      productoId: prod.id,
+      productoNombre: prod.nombre,
+      unidad: prod.unidad,
       cantidad: cant,
       costoUnitario: costo,
       subtotal: cant * costo
@@ -246,10 +255,13 @@ export default function Compras() {
                   )}
                 </div>
                 <input className="form-control" type="number" step="0.001" min="0"
-                  placeholder="Cantidad" value={cantItem} onChange={e => setCantItem(e.target.value)}
+                  placeholder="Cantidad" value={cantItem}
+                  onChange={e => setCantItem(e.target.value)}
                   style={{ width:90 }} />
                 <input className="form-control" type="number" step="0.01" min="0"
-                  placeholder="Costo $" value={costoItem} onChange={e => setCostoItem(e.target.value)}
+                  placeholder="Costo $" value={costoItem}
+                  onChange={e => setCostoItem(e.target.value)}
+                  onKeyDown={e => { if(e.key === 'Enter') agregarItem() }}
                   style={{ width:100 }} />
               </div>
               <button className="btn btn-outline btn-sm" style={{ width:'100%' }} onClick={agregarItem}>
