@@ -27,7 +27,7 @@ function AppInner() {
       <nav className="sidebar">
         <div className="sidebar-logo">
           <span className="logo-icon">🥩</span>
-          <span className="logo-text">Fiambería</span>
+          <span className="logo-text">La Picadita</span>
         </div>
         <div className="nav-section">Operación</div>
         <NavLink to="/" end className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🛒</span> Ventas</NavLink>
