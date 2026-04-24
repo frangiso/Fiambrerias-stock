@@ -20,6 +20,7 @@ export default function Caja() {
   const [toast, setToast] = useState(null)
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
   const [cajaAbierta, setCajaAbierta] = useState(false)
+  const [cajaCerrada, setCajaCerrada] = useState(false)
   const [saldoApertura, setSaldoApertura] = useState(0)
   const [montoApertura, setMontoApertura] = useState('')
 
@@ -39,6 +40,7 @@ export default function Caja() {
     setMovimientos(lista)
     const apertura = lista.find(m => m.tipo === 'apertura')
     setCajaAbierta(!!apertura)
+    setCajaCerrada(!!(lista.find(m => m.tipo === 'cierre')))
     setSaldoApertura(apertura?.monto || 0)
     setLoading(false)
   }
@@ -54,6 +56,18 @@ export default function Caja() {
     mostrarToast('✅ Caja abierta', 'success')
     setModal(null)
     setMontoApertura('')
+    cargar()
+  }
+
+  async function cerrarCaja() {
+    if (!confirm('¿Cerrar la caja del día? Podrás ver los movimientos pero no agregar más.')) return
+    await addDoc(collection(db, 'caja'), {
+      concepto: `Cierre de caja — Saldo: $${saldo.toLocaleString('es-AR')}`,
+      monto: saldo,
+      tipo: 'cierre',
+      fecha: Timestamp.now()
+    })
+    mostrarToast('🔒 Caja cerrada', 'success')
     cargar()
   }
 
@@ -99,11 +113,15 @@ export default function Caja() {
           {!cajaAbierta && fecha === new Date().toISOString().split('T')[0] && (
             <button className="btn btn-primary" onClick={() => setModal('apertura')}>🔓 Abrir caja</button>
           )}
-          {cajaAbierta && (
+          {cajaAbierta && !cajaCerrada && (
             <>
               <button className="btn btn-primary" onClick={() => { setForm({ concepto:'', monto:'', tipo: TIPOS_INGRESO[0] }); setModal('ingreso') }}>+ Ingreso</button>
               <button className="btn btn-danger" onClick={() => { setForm({ concepto:'', monto:'', tipo: TIPOS_EGRESO[0] }); setModal('egreso') }}>− Egreso</button>
+              <button className="btn btn-outline" onClick={cerrarCaja}>🔒 Cerrar caja</button>
             </>
+          )}
+          {cajaCerrada && (
+            <span style={{ fontSize:'0.85rem', color:'var(--muted)', background:'var(--bg)', padding:'8px 14px', borderRadius:8 }}>🔒 Caja cerrada</span>
           )}
         </div>
       </div>
