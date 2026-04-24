@@ -24,6 +24,18 @@ export default function Productos() {
 
   useEffect(() => { cargar() }, [])
 
+  const RUBROS_DEFAULT = [
+    { nombre:'Fiambres',    icono:'🥩', color:'#C9736A' },
+    { nombre:'Quesos',      icono:'🧀', color:'#C9A84C' },
+    { nombre:'Embutidos',   icono:'🍖', color:'#C0392B' },
+    { nombre:'Bebidas',     icono:'🥤', color:'#4A7AB5' },
+    { nombre:'Almacén',     icono:'🛒', color:'#2A5C45' },
+    { nombre:'Lácteos',     icono:'🥛', color:'#8B5CF6' },
+    { nombre:'Panificados', icono:'🍞', color:'#F97316' },
+    { nombre:'Limpieza',    icono:'🧹', color:'#64748B' },
+    { nombre:'Otro',        icono:'📦', color:'#888880' },
+  ]
+
   async function cargar() {
     setLoading(true)
     // Cargar rubros con caché
@@ -32,7 +44,18 @@ export default function Productos() {
       setRubros(cachedRubros)
     } else {
       const rSnap = await getDocs(collection(db, 'rubros'))
-      const lista = rSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      let lista = rSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      // Si no hay rubros, cargar los default automáticamente
+      if (lista.length === 0) {
+        const batch = writeBatch(db)
+        RUBROS_DEFAULT.forEach(r => {
+          const ref = doc(collection(db, 'rubros'))
+          batch.set(ref, r)
+        })
+        await batch.commit()
+        const rSnap2 = await getDocs(collection(db, 'rubros'))
+        lista = rSnap2.docs.map(d => ({ id: d.id, ...d.data() }))
+      }
       setRubros(lista)
       setCache('rubros', lista)
     }
