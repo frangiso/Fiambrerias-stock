@@ -194,6 +194,8 @@ export default function Ventas() {
   async function confirmarVenta() {
     if (!carrito.length) return
     setLoading(true)
+    const totalFinal = calcularTotal() // guardar antes de limpiar el carrito
+    const itemsSnapshot = [...carrito] // copia del carrito
 
     // Construir lista de movimientos de stock (expandiendo recetas)
     const movimientos = []
@@ -227,12 +229,22 @@ export default function Ventas() {
       }
 
       const ventaData = {
-        items: carrito.map(i => ({ id: i.id, nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, precio: i.precio || 0, esReceta: i.esReceta || false })),
-        total: calcularTotal(),
+        items: itemsSnapshot.map(i => ({ id: i.id, nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, precio: i.precio || 0, esReceta: i.esReceta || false })),
+        total: totalFinal,
         fecha: Timestamp.now()
       }
       await addDoc(collection(db, 'ventas'), ventaData)
-      setUltimaVenta({ ...ventaData, total: calcularTotal() })
+
+      // Registrar ingreso en caja automáticamente
+      await addDoc(collection(db, 'caja'), {
+        concepto: `Venta — ${itemsSnapshot.map(i => i.nombre).join(', ')}`,
+        monto: totalFinal,
+        tipo: 'ingreso',
+        subtipo: 'Venta mostrador',
+        fecha: Timestamp.now()
+      })
+
+      setUltimaVenta({ ...ventaData, total: totalFinal })
       setCarrito([])
       cargarDatos()
       mostrarToast('✅ Venta registrada', 'success')
