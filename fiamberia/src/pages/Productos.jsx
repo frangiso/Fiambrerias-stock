@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
+import { getCache, setCache } from '../firebase/cache.js'
 
 const EMPTY = { nombre: '', codigo: '', codigoBarra: '', categoria: '', precio: '', stock: '', stockMinimo: '', unidad: 'unidad' }
-const CATEGORIAS = ['Fiambres', 'Quesos', 'Embutidos', 'Bebidas', 'Almacén', 'Lácteos', 'Panificados', 'Limpieza', 'Otro']
 
 export default function Productos() {
   const [productos, setProductos] = useState([])
+  const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [modalAumento, setModalAumento] = useState(false)
@@ -25,6 +26,16 @@ export default function Productos() {
 
   async function cargar() {
     setLoading(true)
+    // Cargar rubros con caché
+    const cachedRubros = getCache('rubros')
+    if (cachedRubros) {
+      setRubros(cachedRubros)
+    } else {
+      const rSnap = await getDocs(collection(db, 'rubros'))
+      const lista = rSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      setRubros(lista)
+      setCache('rubros', lista)
+    }
     const snap = await getDocs(collection(db, 'productos'))
     const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
     lista.sort((a, b) => a.nombre?.localeCompare(b.nombre))
@@ -116,7 +127,7 @@ export default function Productos() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        {['Todos', ...CATEGORIAS].map(c => (
+        {['Todos', ...rubros.map(r => r.nombre)].map(c => (
           <button key={c} className={`btn btn-sm ${filtroCat === c ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFiltroCat(c)}>{c}</button>
         ))}
         <input className="form-control" style={{ maxWidth: 220, marginLeft: 'auto' }} placeholder="Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
@@ -201,7 +212,7 @@ export default function Productos() {
               <label>Categoría</label>
               <select className="form-control" value={form.categoria} onChange={e => setForm(f => ({...f, categoria: e.target.value}))}>
                 <option value="">Seleccionar...</option>
-                {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                {rubros.map(r => <option key={r.id} value={r.nombre}>{r.icono || ''} {r.nombre}</option>)}
               </select>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -241,7 +252,7 @@ export default function Productos() {
                 <label>Rubro a actualizar</label>
                 <select className="form-control" value={aumentoCat} onChange={e => setAumentoCat(e.target.value)}>
                   <option value="Todos">Todos los productos</option>
-                  {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                  {rubros.map(r => <option key={r.id} value={r.nombre}>{r.icono || ''} {r.nombre}</option>)}
                 </select>
               </div>
               <div className="form-group">
