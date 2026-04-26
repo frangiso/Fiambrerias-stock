@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { AppProvider, useApp } from './context/AppContext.jsx'
+import { CajaProvider } from './context/CajaContext.jsx'
+import CajaGuard from './components/CajaGuard.jsx'
 import Login from './pages/Login.jsx'
 import Ventas from './pages/Ventas.jsx'
 import Stock from './pages/Stock.jsx'
@@ -49,9 +51,9 @@ function AppInner() {
 
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<Ventas />} />
+          <Route path="/" element={<CajaGuard accion="registrar ventas"><Ventas /></CajaGuard>} />
           <Route path="/caja" element={<Caja />} />
-          <Route path="/compras" element={<Compras />} />
+          <Route path="/compras" element={<CajaGuard accion="registrar compras"><Compras /></CajaGuard>} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/rubros" element={<Rubros />} />
@@ -79,7 +81,9 @@ export default function App() {
   return (
     <AppProvider>
       <BrowserRouter>
-        <AppInner />
+        <CajaProvider>
+          <AppInner />
+        </CajaProvider>
       </BrowserRouter>
     </AppProvider>
   )
