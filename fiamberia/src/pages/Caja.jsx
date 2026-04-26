@@ -3,11 +3,13 @@ import { collection, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getCajaDelDia } from '../firebase/db.js'
 import { invalidateCache } from '../firebase/cache.js'
+import { useCaja } from '../context/CajaContext.jsx'
 
 const TIPOS_INGRESO = ['Venta mostrador','Venta a crédito','Otro ingreso']
 const TIPOS_EGRESO  = ['Compra mercadería','Gasto operativo','Retiro de caja','Pago proveedor','Otro egreso']
 
 export default function Caja() {
+  const { verificarCaja } = useCaja()
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
@@ -38,6 +40,7 @@ export default function Caja() {
     invalidateCache(`caja_${fecha}`)
     setModal(null); setMontoApertura('')
     await cargar(true)
+    verificarCaja()
     mostrarToast('✅ Caja abierta', 'success')
   }
 
@@ -47,6 +50,7 @@ export default function Caja() {
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
     await cargar(true)
+    verificarCaja()
     mostrarToast('🔒 Caja cerrada', 'success')
   }
 
