@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, addDoc, updateDoc, doc, increment, Timestamp, writeBatch } from 'firebase/firestore'
+import { collection, addDoc, doc, increment, Timestamp, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getProductos, getCompras } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
@@ -120,8 +120,8 @@ export default function Compras() {
       setModal(false); setProveedor(''); setNroFactura(''); setItems([])
       await cargar(true)
     } catch(e) {
-      console.error(e)
-      mostrarToast('❌ Error al registrar la compra', 'danger')
+      console.error('confirmarCompra error:', e)
+      mostrarToast('❌ Error: ' + (e.message || 'Error al registrar'), 'danger')
     }
     setGuardando(false)
   }

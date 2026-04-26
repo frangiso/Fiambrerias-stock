@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getCajaDelDia } from '../firebase/db.js'
-import { invalidateCache, addCacheItem } from '../firebase/cache.js'
+import { invalidateCache } from '../firebase/cache.js'
 
 const TIPOS_INGRESO = ['Venta mostrador','Venta a crédito','Otro ingreso']
 const TIPOS_EGRESO  = ['Compra mercadería','Gasto operativo','Retiro de caja','Pago proveedor','Otro egreso']

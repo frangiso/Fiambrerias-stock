@@ -31,17 +31,17 @@ export default function Rubros() {
     if (editId) await updateDoc(doc(db, 'rubros', editId), data)
     else await addDoc(collection(db, 'rubros'), data)
     invalidateCache('rubros')
-    mostrarToast('✅ Rubro guardado', 'success')
     setModal(false)
-    cargar()
+    await cargar()
+    mostrarToast('✅ Rubro guardado', 'success')
   }
 
   async function eliminar(r) {
     if (!confirm(`¿Eliminar rubro "${r.nombre}"? Los productos de este rubro quedarán sin categoría.`)) return
     await deleteDoc(doc(db, 'rubros', r.id))
     invalidateCache('rubros')
+    await cargar()
     mostrarToast('Rubro eliminado', 'warning')
-    cargar()
   }
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3000) }

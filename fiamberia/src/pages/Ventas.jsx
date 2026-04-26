@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, doc, updateDoc, addDoc, Timestamp, increment, writeBatch } from 'firebase/firestore'
+import { collection, doc, Timestamp, increment, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getProductos, getRecetas } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
@@ -229,8 +229,8 @@ export default function Ventas() {
       setProductos(await getProductos(false))
       mostrarToast('✅ Venta registrada', 'success')
     } catch (e) {
-      console.error(e)
-      mostrarToast('❌ Error al registrar', 'danger')
+      console.error('confirmarVenta error:', e)
+      mostrarToast('❌ Error: ' + (e.message || 'Error al registrar'), 'danger')
     }
     setLoading(false)
   }

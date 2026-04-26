@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { doc, updateDoc, addDoc, collection, Timestamp, increment } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getProductos } from '../firebase/db.js'
-import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
+import { updateCacheItem } from '../firebase/cache.js'
 
 export default function Stock() {
   const [productos, setProductos] = useState([])

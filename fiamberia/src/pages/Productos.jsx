@@ -6,8 +6,8 @@ import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 const EMPTY = { nombre: '', categoria: '', precio: '', stock: '', stockMinimo: '', unidad: 'unidad' }
 
 function generarCodigo(productos) {
-  const nums = productos.map(p => parseInt(p.codigo || '0')).filter(n => !isNaN(n))
-  const max = nums.length ? Math.max(...nums) : 0
+  const nums = productos.map(p => parseInt(p.codigo || '0')).filter(n => !isNaN(n) && isFinite(n))
+  const max = nums.length > 0 ? Math.max(...nums) : 0
   return String(max + 1).padStart(4, '0')
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
+import { invalidateCache } from '../firebase/cache.js'
 
 const EMPTY_RECETA = { nombre: '', descripcion: '', precio: '', ingredientes: [] }
 
@@ -82,6 +83,7 @@ export default function Recetas() {
     try {
       if (editId) { await updateDoc(doc(db, 'recetas', editId), data); mostrarToast('✅ Receta actualizada', 'success') }
       else { await addDoc(collection(db, 'recetas'), data); mostrarToast('✅ Receta creada', 'success') }
+      invalidateCache('recetas')
       setModal(false); cargar()
     } catch { mostrarToast('❌ Error al guardar', 'danger') }
     setGuardando(false)
@@ -90,6 +92,7 @@ export default function Recetas() {
   async function eliminar(r) {
     if (!confirm(`¿Eliminar "${r.nombre}"?`)) return
     await deleteDoc(doc(db, 'recetas', r.id))
+    invalidateCache('recetas')
     mostrarToast('Receta eliminada', 'warning'); cargar()
   }
 
