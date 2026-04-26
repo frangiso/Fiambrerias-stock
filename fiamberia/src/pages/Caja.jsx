@@ -13,7 +13,7 @@ export default function Caja() {
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ concepto:'', monto:'', tipo:'' })
   const [toast, setToast] = useState(null)
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [fecha, setFecha] = useState((() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })())
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [cajaCerrada, setCajaCerrada] = useState(false)
   const [montoApertura, setMontoApertura] = useState('')
@@ -36,9 +36,9 @@ export default function Caja() {
     const nuevo = { concepto:'Apertura de caja', monto, tipo:'apertura', fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
-    mostrarToast('✅ Caja abierta', 'success')
     setModal(null); setMontoApertura('')
-    cargar(true)
+    await cargar(true)
+    mostrarToast('✅ Caja abierta', 'success')
   }
 
   async function cerrarCaja() {
@@ -46,8 +46,8 @@ export default function Caja() {
     const nuevo = { concepto:`Cierre de caja — Saldo: $${saldo.toLocaleString('es-AR')}`, monto: saldo, tipo:'cierre', fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
+    await cargar(true)
     mostrarToast('🔒 Caja cerrada', 'success')
-    cargar(true)
   }
 
   async function guardarMovimiento() {
@@ -57,9 +57,9 @@ export default function Caja() {
     const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`, 'reportes')
-    mostrarToast(`✅ ${modal==='ingreso'?'Ingreso':'Egreso'} registrado`, 'success')
     setModal(null); setForm({ concepto:'', monto:'', tipo:'' })
-    cargar(true)
+    await cargar(true)
+    mostrarToast(`✅ ${modal==='ingreso'?'Ingreso':'Egreso'} registrado`, 'success')
   }
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3000) }
@@ -73,7 +73,7 @@ export default function Caja() {
     return ts.toDate().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' })
   }
 
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })()
 
   return (
     <div>

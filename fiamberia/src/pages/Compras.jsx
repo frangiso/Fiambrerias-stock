@@ -118,7 +118,7 @@ export default function Compras() {
 
       mostrarToast('✅ Compra registrada y stock actualizado', 'success')
       setModal(false); setProveedor(''); setNroFactura(''); setItems([])
-      cargar(true)
+      await cargar(true)
     } catch(e) {
       console.error(e)
       mostrarToast('❌ Error al registrar la compra', 'danger')

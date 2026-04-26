@@ -6,16 +6,17 @@ export default function Reportes() {
   const [data, setData] = useState({ movimientos:[], ventas:[], caja:[] })
   const [loading, setLoading] = useState(true)
   const [tipoPeriodo, setTipoPeriodo] = useState('dia')
-  const [fechaDia, setFechaDia] = useState(new Date().toISOString().split('T')[0])
+  const [fechaDia, setFechaDia] = useState((() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })())
   const [fechaMes, setFechaMes] = useState(new Date().toISOString().slice(0,7))
 
   useEffect(() => { cargar() }, [tipoPeriodo, fechaDia, fechaMes])
 
   function getRango() {
     if (tipoPeriodo === 'dia') {
+      const p = fechaDia.split('-').map(Number)
       return {
-        desde: Timestamp.fromDate(new Date(fechaDia + 'T00:00:00')),
-        hasta: Timestamp.fromDate(new Date(fechaDia + 'T23:59:59')),
+        desde: Timestamp.fromDate(new Date(p[0], p[1]-1, p[2], 0, 0, 0)),
+        hasta: Timestamp.fromDate(new Date(p[0], p[1]-1, p[2], 23, 59, 59)),
         key: `dia_${fechaDia}`
       }
     }
@@ -28,9 +29,8 @@ export default function Reportes() {
       }
     }
     // semana
-    const hoy = new Date()
-    const d7 = new Date(hoy); d7.setDate(d7.getDate()-7); d7.setHours(0,0,0,0)
-    hoy.setHours(23,59,59,999)
+    const hoy = new Date(); hoy.setHours(23,59,59,999)
+    const d7  = new Date(); d7.setDate(d7.getDate()-7); d7.setHours(0,0,0,0)
     return { desde: Timestamp.fromDate(d7), hasta: Timestamp.fromDate(hoy), key: 'semana' }
   }
 
