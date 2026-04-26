@@ -91,7 +91,7 @@ export default function Caja() {
             style={{ padding:'8px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:'0.88rem' }} />
           {(!cajaAbierta || cajaCerrada) && fecha === hoy && (
             <button className="btn btn-primary" onClick={() => setModal('apertura')}>
-              🔓 {cajaCerrada ? 'Reabrir caja' : 'Abrir caja'}
+              🔓 Abrir caja
             </button>
           )}
           {cajaAbierta && !cajaCerrada && (
@@ -159,7 +159,7 @@ export default function Caja() {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">🔓 {cajaCerrada?'Reapertura':'Apertura'} de caja</h3>
+              <h3 className="modal-title">🔓 Apertura de caja</h3>
               <button className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
             <div className="form-group">
