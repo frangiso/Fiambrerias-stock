@@ -64,8 +64,11 @@ function AppInner() {
       <nav className="bottom-nav">
         <NavLink to="/" end className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🛒</span><small>Ventas</small></NavLink>
         <NavLink to="/caja" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>💰</span><small>Caja</small></NavLink>
+        <NavLink to="/compras" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🛍️</span><small>Compras</small></NavLink>
         <NavLink to="/stock" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>📦</span><small>Stock</small></NavLink>
-        <NavLink to="/productos" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>✏️</span><small>Prod.</small></NavLink>
+        <NavLink to="/productos" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>✏️</span><small>Productos</small></NavLink>
+        <NavLink to="/rubros" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🏷️</span><small>Rubros</small></NavLink>
+        <NavLink to="/recetas" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🍕</span><small>Recetas</small></NavLink>
         <NavLink to="/reportes" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>📊</span><small>Reportes</small></NavLink>
       </nav>
     </div>
