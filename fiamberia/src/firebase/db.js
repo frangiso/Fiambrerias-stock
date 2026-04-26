@@ -53,11 +53,12 @@ export async function getCajaDelDia(fecha, forceRefresh = false) {
     const cached = getCache(key)
     if (cached) return cached
   }
-  const d    = new Date(fecha + 'T00:00:00')
-  const dFin = new Date(fecha + 'T23:59:59')
+  const partes = fecha.split('-').map(Number)
+  const dInicio = new Date(partes[0], partes[1]-1, partes[2], 0, 0, 0, 0)
+  const dFin    = new Date(partes[0], partes[1]-1, partes[2], 23, 59, 59, 999)
   const snap = await getDocs(query(
     collection(db, 'caja'),
-    where('fecha', '>=', Timestamp.fromDate(d)),
+    where('fecha', '>=', Timestamp.fromDate(dInicio)),
     where('fecha', '<=', Timestamp.fromDate(dFin))
   ))
   const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
