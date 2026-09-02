@@ -4,7 +4,7 @@ import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
 
-const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '' }
+const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '' }
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -83,7 +83,7 @@ export default function Productos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
 
   function abrirEditar(p) {
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'' })
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'' })
     setEditId(p.id); setModal(true)
   }
 
@@ -98,7 +98,8 @@ export default function Productos() {
       stock: parseFloat(form.stock)||0,
       stockMinimo: parseFloat(form.stockMinimo)||0,
       unidad: form.unidad,
-      fechaVencimiento: form.fechaVencimiento || null
+      fechaVencimiento: form.fechaVencimiento || null,
+      codigoBarra: form.codigoBarra.trim() || null
     }
     try {
       if (editId) {
@@ -172,7 +173,7 @@ export default function Productos() {
 
   const filtrados = productos.filter(p => {
     const matchCat = filtroCat === 'Todos' || p.categoria === filtroCat
-    const matchBusq = !busqueda || p.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || p.codigo?.includes(busqueda)
+    const matchBusq = !busqueda || p.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || p.codigo?.includes(busqueda) || p.codigoBarra?.includes(busqueda)
     return matchCat && matchBusq
   })
 
@@ -188,6 +189,7 @@ export default function Productos() {
             productos,
             [
               { label:'Código', get: p => p.codigo||'' },
+              { label:'Código de barras', get: p => p.codigoBarra||'' },
               { label:'Nombre', get: p => p.nombre||'' },
               { label:'Categoría', get: p => p.categoria||'' },
               { label:'Unidad', get: p => p.unidad||'' },
@@ -285,6 +287,10 @@ export default function Productos() {
             <div className="form-group">
               <label>Nombre *</label>
               <input className="form-control" value={form.nombre} onChange={e => setForm(f => ({...f, nombre: e.target.value}))} placeholder="Ej: Salame Casero" />
+            </div>
+            <div className="form-group">
+              <label>Código de barras (opcional)</label>
+              <input className="form-control" value={form.codigoBarra} onChange={e => setForm(f => ({...f, codigoBarra: e.target.value}))} placeholder="Escaneá acá o tipealo — EAN de fábrica" />
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group">
