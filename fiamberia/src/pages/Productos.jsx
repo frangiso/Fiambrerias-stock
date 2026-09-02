@@ -4,7 +4,7 @@ import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
 
-const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '' }
+const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '', codigo: '' }
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -83,12 +83,17 @@ export default function Productos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
 
   function abrirEditar(p) {
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'' })
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'', codigo: p.codigo||'' })
     setEditId(p.id); setModal(true)
   }
 
   async function guardar() {
     if (!form.nombre.trim()) { mostrarToast('El nombre es obligatorio', 'danger'); return }
+    const codigoManual = form.codigo.trim()
+    if (editId && !codigoManual) { mostrarToast('El código no puede quedar vacío', 'danger'); return }
+    if (codigoManual && productos.some(p => p.codigo === codigoManual && p.id !== editId)) {
+      mostrarToast(`Ya existe un producto con el código "${codigoManual}"`, 'danger'); return
+    }
     setGuardando(true)
     const data = {
       nombre: form.nombre.trim(),
@@ -99,15 +104,15 @@ export default function Productos() {
       stockMinimo: parseFloat(form.stockMinimo)||0,
       unidad: form.unidad,
       fechaVencimiento: form.fechaVencimiento || null,
-      codigoBarra: form.codigoBarra.trim() || null
+      codigoBarra: form.codigoBarra.trim() || null,
+      // Código propio si lo cargaron, si no se autogenera uno único
+      codigo: codigoManual || generarCodigo(productos)
     }
     try {
       if (editId) {
         await updateDoc(doc(db, 'productos', editId), data)
         mostrarToast('✅ Producto actualizado', 'success')
       } else {
-        // Auto-generar código interno único
-        data.codigo = generarCodigo(productos)
         await addDoc(collection(db, 'productos'), data)
         mostrarToast(`✅ Producto creado — Código: ${data.codigo}`, 'success')
       }
@@ -281,16 +286,22 @@ export default function Productos() {
             </div>
             {!editId && (
               <div className="alert alert-warning" style={{ marginBottom:14, fontSize:'0.82rem' }}>
-                💡 El código interno se genera automáticamente al guardar
+                💡 Si dejás el código en blanco se genera uno automáticamente
               </div>
             )}
             <div className="form-group">
               <label>Nombre *</label>
               <input className="form-control" value={form.nombre} onChange={e => setForm(f => ({...f, nombre: e.target.value}))} placeholder="Ej: Salame Casero" />
             </div>
-            <div className="form-group">
-              <label>Código de barras (opcional)</label>
-              <input className="form-control" value={form.codigoBarra} onChange={e => setForm(f => ({...f, codigoBarra: e.target.value}))} placeholder="Escaneá acá o tipealo — EAN de fábrica" />
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <div className="form-group">
+                <label>Código propio {!editId && '(opcional)'}</label>
+                <input className="form-control" value={form.codigo} onChange={e => setForm(f => ({...f, codigo: e.target.value}))} placeholder={editId ? '' : 'Se autogenera si lo dejás vacío'} />
+              </div>
+              <div className="form-group">
+                <label>Código de barras (opcional)</label>
+                <input className="form-control" value={form.codigoBarra} onChange={e => setForm(f => ({...f, codigoBarra: e.target.value}))} placeholder="Escaneá acá o tipealo — EAN de fábrica" />
+              </div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group">
