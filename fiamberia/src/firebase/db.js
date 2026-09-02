@@ -156,7 +156,6 @@ export async function getReportes(desde, hasta, cacheKey, forceRefresh = false) 
   }
   const [movSnap, venSnap, cajaSnap] = await Promise.all([
     getDocs(query(collection(db, 'movimientos'),
-      where('tipo', '==', 'venta'), // solo ventas, no cargas
       where('fecha', '>=', desde),
       where('fecha', '<=', hasta)
     )),

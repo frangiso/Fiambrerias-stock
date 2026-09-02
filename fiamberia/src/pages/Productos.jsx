@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore'
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
@@ -24,7 +24,7 @@ function generarCodigo(productos) {
 }
 
 export default function Productos() {
-  const { isAdmin } = useApp()
+  const { isAdmin, user } = useApp()
   const [productos, setProductos] = useState([])
   const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
@@ -149,9 +149,22 @@ export default function Productos() {
   }
 
   async function eliminar(p) {
-    if (!confirm(`¿Eliminar "${p.nombre}"?`)) return
-    await deleteDoc(doc(db, 'productos', p.id))
-    mostrarToast('Producto eliminado', 'warning'); cargar()
+    const motivo = prompt(`Vas a eliminar "${p.nombre}" (stock actual: ${p.stock} ${p.unidad==='kg'?'kg':'u.'}).\nEsta acción queda registrada. Indicá el motivo de la baja:`)
+    if (motivo === null) return
+    if (!motivo.trim()) { mostrarToast('Debés indicar un motivo para eliminar el producto', 'danger'); return }
+    if (!confirm(`Confirmá: eliminar "${p.nombre}" por "${motivo.trim()}"`)) return
+    try {
+      await addDoc(collection(db, 'movimientos'), {
+        productoId: p.id, productoNombre: p.nombre, codigo: p.codigo || null,
+        categoria: p.categoria || null, precio: p.precio || 0,
+        stockFinal: p.stock || 0, unidad: p.unidad || 'unidad',
+        tipo: 'baja_producto', motivo: motivo.trim(),
+        registradoPor: user?.email || null, fecha: Timestamp.now()
+      })
+      await deleteDoc(doc(db, 'productos', p.id))
+      invalidateCache('productos')
+      mostrarToast('Producto eliminado y baja registrada', 'warning'); cargar()
+    } catch { mostrarToast('❌ Error al eliminar el producto', 'danger') }
   }
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3500) }

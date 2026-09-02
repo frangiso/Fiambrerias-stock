@@ -4,6 +4,7 @@ import { db } from '../firebase/config.js'
 import { getCajaDelDia } from '../firebase/db.js'
 import { invalidateCache } from '../firebase/cache.js'
 import { useCaja } from '../context/CajaContext.jsx'
+import { useApp } from '../context/AppContext.jsx'
 
 const TIPOS_INGRESO = ['Venta mostrador','Venta a crédito','Otro ingreso']
 const TIPOS_EGRESO  = ['Compra mercadería','Gasto operativo','Retiro de caja','Pago proveedor','Otro egreso']
@@ -11,6 +12,7 @@ const MEDIOS_PAGO   = ['Efectivo','Tarjeta','Transferencia']
 
 export default function Caja() {
   const { verificarCaja } = useCaja()
+  const { user } = useApp()
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
@@ -37,7 +39,7 @@ export default function Caja() {
 
   async function abrirCaja() {
     const monto = parseFloat(montoApertura) || 0
-    const nuevo = { concepto:'Apertura de caja', monto, tipo:'apertura', fecha: Timestamp.now() }
+    const nuevo = { concepto:'Apertura de caja', monto, tipo:'apertura', registradoPor: user?.email || null, fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
     setModal(null); setMontoApertura('')
@@ -53,7 +55,7 @@ export default function Caja() {
     const nuevo = {
       concepto:`Cierre de caja — Sistema: $${saldo.toLocaleString('es-AR')} · Efectivo contado: $${contado.toLocaleString('es-AR')}`,
       monto: saldo, tipo:'cierre', saldoSistema: saldo, saldoEfectivoSistema: saldoEfectivo,
-      efectivoContado: contado, diferencia, fecha: Timestamp.now()
+      efectivoContado: contado, diferencia, registradoPor: user?.email || null, fecha: Timestamp.now()
     }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
@@ -67,7 +69,7 @@ export default function Caja() {
     const monto = parseFloat(form.monto)
     if (!monto || monto <= 0) { mostrarToast('Ingresá un monto válido', 'danger'); return }
     if (!form.concepto.trim()) { mostrarToast('Ingresá un concepto', 'danger'); return }
-    const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, medioPago: form.medioPago, fecha: Timestamp.now() }
+    const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, medioPago: form.medioPago, registradoPor: user?.email || null, fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`, 'reportes')
     setModal(null); setForm({ concepto:'', monto:'', tipo:'', medioPago:'Efectivo' })
@@ -148,7 +150,7 @@ export default function Caja() {
         ) : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th>Ingreso</th><th>Egreso</th></tr></thead>
+              <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th>Registrado por</th><th>Ingreso</th><th>Egreso</th></tr></thead>
               <tbody>
                 {movimientos.map(m => (
                   <tr key={m.id}>
@@ -156,6 +158,7 @@ export default function Caja() {
                     <td style={{ fontWeight:600 }}>{m.concepto}</td>
                     <td><span className="badge badge-ok" style={{ fontSize:'0.68rem' }}>{m.subtipo||m.tipo}</span></td>
                     <td style={{ fontSize:'0.8rem', color:'var(--muted)' }}>{m.medioPago || (m.tipo==='cierre'?'—':'Efectivo')}</td>
+                    <td style={{ fontSize:'0.76rem', color:'var(--muted)' }}>{m.registradoPor || '—'}</td>
                     <td style={{ fontWeight:700, color:'var(--primary)' }}>
                       {(m.tipo==='ingreso'||m.tipo==='apertura')?'$'+m.monto.toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
                     </td>

@@ -92,6 +92,11 @@ export default function Reportes() {
     }, {})
   ).sort((a,b) => b.cantidad - a.cantidad).slice(0,10)
 
+  // Auditoría — mermas y bajas de productos (posible fuente de robo/pérdidas encubiertas)
+  const movimientosAuditoria = movimientos
+    .filter(m => m.tipo === 'merma' || m.tipo === 'baja_producto')
+    .slice().reverse()
+
   function formatFecha(ts) {
     if (!ts) return '—'
     const d = ts.toDate ? ts.toDate() : new Date(ts)
@@ -222,17 +227,17 @@ export default function Reportes() {
           </div>
 
           {/* Movimientos de stock — solo ventas */}
-          <div className="card" style={{ padding:0 }}>
+          <div className="card" style={{ padding:0, marginBottom: isAdmin ? 20 : 0 }}>
             <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)', fontWeight:700, fontSize:'0.95rem' }}>
               📋 Movimientos de stock (ventas)
             </div>
             <div className="table-wrap">
-              {movimientos.length === 0
+              {movimientosValidos.length === 0
                 ? <div className="empty-state"><div className="empty-icon">📋</div><p>Sin movimientos en este período</p></div>
                 : <table>
                     <thead><tr><th>Fecha</th><th>Producto</th><th>Cantidad vendida</th></tr></thead>
                     <tbody>
-                      {movimientos.slice().reverse().map(m => (
+                      {movimientosValidos.slice().reverse().map(m => (
                         <tr key={m.id}>
                           <td style={{ color:'var(--muted)', fontSize:'0.8rem' }}>{formatFecha(m.fecha)}</td>
                           <td style={{ fontWeight:600 }}>{m.productoNombre}</td>
@@ -246,6 +251,56 @@ export default function Reportes() {
               }
             </div>
           </div>
+
+          {/* Auditoría — mermas y bajas de productos (solo admin) */}
+          {isAdmin && (
+            <div className="card" style={{ padding:0 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 20px', borderBottom:'1px solid var(--border)' }}>
+                <span style={{ fontWeight:700, fontSize:'0.95rem' }}>🕵️ Auditoría — mermas y bajas de stock</span>
+                {movimientosAuditoria.length > 0 && (
+                  <button className="btn btn-outline btn-sm" onClick={() => exportarCSV(
+                    movimientosAuditoria,
+                    [
+                      { label:'Fecha', get: m => formatFecha(m.fecha) },
+                      { label:'Tipo', get: m => m.tipo === 'baja_producto' ? 'Baja de producto' : 'Merma' },
+                      { label:'Producto', get: m => m.productoNombre || '' },
+                      { label:'Cantidad', get: m => m.tipo === 'baja_producto' ? m.stockFinal : m.cantidad },
+                      { label:'Unidad', get: m => m.unidad || '' },
+                      { label:'Motivo', get: m => m.motivo || '' },
+                      { label:'Registrado por', get: m => m.registradoPor || '' },
+                    ],
+                    `auditoria_${labelPeriodo}.csv`
+                  )}>⬇️ CSV</button>
+                )}
+              </div>
+              <div className="table-wrap">
+                {movimientosAuditoria.length === 0
+                  ? <div className="empty-state"><div className="empty-icon">🕵️</div><p>Sin mermas ni bajas en este período</p></div>
+                  : <table>
+                      <thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cantidad</th><th>Motivo</th><th>Registrado por</th></tr></thead>
+                      <tbody>
+                        {movimientosAuditoria.map(m => (
+                          <tr key={m.id}>
+                            <td style={{ color:'var(--muted)', fontSize:'0.8rem' }}>{formatFecha(m.fecha)}</td>
+                            <td>
+                              <span className={`badge ${m.tipo==='baja_producto'?'badge-danger':'badge-warning'}`}>
+                                {m.tipo==='baja_producto' ? 'Baja de producto' : 'Merma'}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight:600 }}>{m.productoNombre}</td>
+                            <td style={{ fontWeight:700, color:'var(--danger)' }}>
+                              -{m.tipo==='baja_producto' ? m.stockFinal : m.cantidad} {m.unidad==='kg'?'kg':'u.'}
+                            </td>
+                            <td style={{ fontSize:'0.82rem' }}>{m.motivo || '—'}</td>
+                            <td style={{ fontSize:'0.76rem', color:'var(--muted)' }}>{m.registradoPor || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                }
+              </div>
+            </div>
+          )}
         </>
       )}
       {toast && <div className={`toast toast-${toast.tipo}`}>{toast.msg}</div>}

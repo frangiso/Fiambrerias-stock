@@ -242,7 +242,8 @@ export default function Ventas() {
         const cajaRef = doc(collection(db, 'caja'))
         batch.set(cajaRef, {
           concepto: `Venta — ${itemsSnapshot.map(i => i.nombre).join(', ')}`,
-          monto: totalFinal, tipo:'ingreso', subtipo:'Venta mostrador', medioPago, ventaId: ventaRef.id, fecha: Timestamp.now()
+          monto: totalFinal, tipo:'ingreso', subtipo:'Venta mostrador', medioPago, ventaId: ventaRef.id,
+          registradoPor: user?.email || null, fecha: Timestamp.now()
         })
       }
 

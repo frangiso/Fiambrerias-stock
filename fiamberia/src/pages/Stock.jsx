@@ -3,8 +3,10 @@ import { doc, updateDoc, addDoc, collection, Timestamp, increment } from 'fireba
 import { db } from '../firebase/config.js'
 import { getProductos } from '../firebase/db.js'
 import { updateCacheItem } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 
 export default function Stock() {
+  const { user } = useApp()
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('todos')
@@ -65,7 +67,8 @@ export default function Stock() {
       await updateDoc(doc(db, 'productos', modalCarga.id), { stock: increment(cant) })
       await addDoc(collection(db, 'movimientos'), {
         productoId: modalCarga.id, productoNombre: modalCarga.nombre,
-        tipo: 'carga', cantidad: cant, unidad: modalCarga.unidad, fecha: Timestamp.now()
+        tipo: 'carga', cantidad: cant, unidad: modalCarga.unidad,
+        registradoPor: user?.email || null, fecha: Timestamp.now()
       })
       // Actualizar caché sin re-leer Firestore
       updateCacheItem('productos', modalCarga.id, p => ({ ...p, stock: p.stock + cant }))
@@ -84,7 +87,8 @@ export default function Stock() {
       await updateDoc(doc(db, 'productos', modalMerma.id), { stock: increment(-cant) })
       await addDoc(collection(db, 'movimientos'), {
         productoId: modalMerma.id, productoNombre: modalMerma.nombre,
-        tipo: 'merma', cantidad: cant, unidad: modalMerma.unidad, motivo: motivoMerma.trim(), fecha: Timestamp.now()
+        tipo: 'merma', cantidad: cant, unidad: modalMerma.unidad, motivo: motivoMerma.trim(),
+        registradoPor: user?.email || null, fecha: Timestamp.now()
       })
       updateCacheItem('productos', modalMerma.id, p => ({ ...p, stock: p.stock - cant }))
       setProductos(await getProductos(false))

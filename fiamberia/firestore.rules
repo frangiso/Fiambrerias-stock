@@ -17,6 +17,14 @@ service cloud.firestore {
         && rolUsuario() == 'admin';
     }
 
+    // Evita que un usuario registre una acción a nombre de otro:
+    // si el doc trae 'registradoPor', tiene que coincidir con el
+    // email de la sesión autenticada actual.
+    function registradoPorPropio() {
+      return !('registradoPor' in request.resource.data)
+        || request.resource.data.registradoPor == request.auth.token.email;
+    }
+
     // ---------------------------------------------------------------
     // usuarios: cada usuario puede crear (una sola vez) su propio doc
     // como 'cajero'. Ascender a admin (o degradar) solo lo puede hacer
@@ -61,7 +69,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /ventas/{id} {
       allow read: if estaLogueado();
-      allow create: if estaLogueado();
+      allow create: if estaLogueado() && registradoPorPropio();
       allow update: if esAdmin()
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['anulada', 'motivoAnulacion', 'anuladaPor', 'anuladaFecha']);
@@ -74,7 +82,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /movimientos/{id} {
       allow read: if estaLogueado();
-      allow create: if estaLogueado();
+      allow create: if estaLogueado() && registradoPorPropio();
       allow update, delete: if false;
     }
 
@@ -86,7 +94,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /caja/{id} {
       allow read: if estaLogueado();
-      allow create: if estaLogueado();
+      allow create: if estaLogueado() && registradoPorPropio();
       allow update, delete: if false;
     }
 
