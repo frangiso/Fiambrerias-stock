@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase/config.js'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 const AppContext = createContext()
@@ -39,12 +39,19 @@ export function AppProvider({ children }) {
     return signInWithEmailAndPassword(auth, email, password)
   }
 
+  // Alta de cuenta nueva desde la pantalla de login. Siempre queda como
+  // "cajero" (lo asigna cargarRol al detectar el nuevo usuario) — para
+  // ascender a admin hay que hacerlo a mano en Firestore o desde otro admin.
+  async function registro(email, password) {
+    return createUserWithEmailAndPassword(auth, email, password)
+  }
+
   async function logout() {
     return signOut(auth)
   }
 
   return (
-    <AppContext.Provider value={{ user, rol, isAdmin: rol === 'admin', authLoading, login, logout }}>
+    <AppContext.Provider value={{ user, rol, isAdmin: rol === 'admin', authLoading, login, registro, logout }}>
       {children}
     </AppContext.Provider>
   )
