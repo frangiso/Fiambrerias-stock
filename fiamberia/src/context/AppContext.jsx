@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { auth, db } from '../firebase/config.js'
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 const AppContext = createContext()
@@ -50,8 +50,12 @@ export function AppProvider({ children }) {
     return signOut(auth)
   }
 
+  async function resetPassword(email) {
+    return sendPasswordResetEmail(auth, email)
+  }
+
   return (
-    <AppContext.Provider value={{ user, rol, isAdmin: rol === 'admin', authLoading, login, registro, logout }}>
+    <AppContext.Provider value={{ user, rol, isAdmin: rol === 'admin', authLoading, login, registro, resetPassword, logout }}>
       {children}
     </AppContext.Provider>
   )
