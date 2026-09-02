@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { collection, doc, Timestamp, increment, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getProductos, getRecetas, getClientes } from '../firebase/db.js'
@@ -280,6 +281,18 @@ export default function Ventas() {
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3500) }
 
+  const stockBajoCount = productos.filter(p => p.stock <= (p.stockMinimo||0)).length
+  const porVencerCount = productos.filter(p => {
+    if (!p.fechaVencimiento) return false
+    const hoy = new Date(new Date().toDateString())
+    const venc = new Date(p.fechaVencimiento)
+    return venc >= hoy && (venc - hoy) <= 3*24*60*60*1000
+  }).length
+  const vencidosCount = productos.filter(p => {
+    if (!p.fechaVencimiento) return false
+    return new Date(p.fechaVencimiento) < new Date(new Date().toDateString())
+  }).length
+
   function formatCantidad(item) {
     if (item.unidad === 'kg') return item.cantidad >= 1 ? `${item.cantidad.toFixed(3)} kg` : `${(item.cantidad*1000).toFixed(0)} g`
     return `${item.cantidad} u.`
@@ -305,6 +318,21 @@ export default function Ventas() {
             </div>
           </div>
         </div>
+
+        {(stockBajoCount > 0 || porVencerCount > 0 || vencidosCount > 0) && (
+          <Link to="/stock" style={{ textDecoration:'none' }}>
+            <div className="alert alert-warning" style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14, cursor:'pointer' }}>
+              <span>⚠️</span>
+              <span style={{ fontSize:'0.85rem' }}>
+                {[
+                  stockBajoCount > 0 && `${stockBajoCount} producto${stockBajoCount!==1?'s':''} con stock bajo`,
+                  vencidosCount > 0 && `${vencidosCount} vencido${vencidosCount!==1?'s':''}`,
+                  porVencerCount > 0 && `${porVencerCount} por vencer`,
+                ].filter(Boolean).join(' · ')} — Ver Stock
+              </span>
+            </div>
+          </Link>
+        )}
 
         <div className="buscador-wrap">
           <input ref={inputRef} className="form-control buscador-input"

@@ -4,7 +4,7 @@ import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
 
-const EMPTY = { nombre: '', categoria: '', precio: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '' }
+const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '' }
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -83,7 +83,7 @@ export default function Productos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
 
   function abrirEditar(p) {
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'' })
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'' })
     setEditId(p.id); setModal(true)
   }
 
@@ -94,6 +94,7 @@ export default function Productos() {
       nombre: form.nombre.trim(),
       categoria: form.categoria,
       precio: parseFloat(form.precio)||0,
+      costo: parseFloat(form.costo)||0,
       stock: parseFloat(form.stock)||0,
       stockMinimo: parseFloat(form.stockMinimo)||0,
       unidad: form.unidad,
@@ -191,6 +192,10 @@ export default function Productos() {
               { label:'Categoría', get: p => p.categoria||'' },
               { label:'Unidad', get: p => p.unidad||'' },
               { label:'Precio', get: p => p.precio||0 },
+              ...(isAdmin ? [
+                { label:'Costo', get: p => p.costo||0 },
+                { label:'Margen %', get: p => p.precio>0 && p.costo>0 ? ((p.precio-p.costo)/p.precio*100).toFixed(1) : '' },
+              ] : []),
               { label:'Stock', get: p => p.stock||0 },
               { label:'Stock mínimo', get: p => p.stockMinimo||0 },
               { label:'Vencimiento', get: p => p.fechaVencimiento||'' },
@@ -217,12 +222,13 @@ export default function Productos() {
           ) : (
             <table>
               <thead>
-                <tr><th>Cód.</th><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Precio ($) — editable</th><th>Stock</th><th>Mín.</th><th>Vencimiento</th><th></th></tr>
+                <tr><th>Cód.</th><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Precio ($) — editable</th>{isAdmin && <th>Margen</th>}<th>Stock</th><th>Mín.</th><th>Vencimiento</th><th></th></tr>
               </thead>
               <tbody>
                 {filtrados.map(p => {
                   const vencido = p.fechaVencimiento && new Date(p.fechaVencimiento) < new Date(new Date().toDateString())
                   const porVencer = !vencido && p.fechaVencimiento && (new Date(p.fechaVencimiento) - new Date(new Date().toDateString())) <= 3*24*60*60*1000
+                  const margenPct = p.precio > 0 && p.costo > 0 ? ((p.precio - p.costo) / p.precio * 100) : null
                   return (
                   <tr key={p.id}>
                     <td style={{ fontFamily:'monospace', color:'var(--muted)', fontSize:'0.82rem', fontWeight:700 }}>{p.codigo || '—'}</td>
@@ -236,6 +242,11 @@ export default function Productos() {
                         onKeyDown={e => { if(e.key==='Enter') e.target.blur() }}
                         title="Editá y presioná Enter para guardar" />
                     </td>
+                    {isAdmin && (
+                      <td style={{ fontWeight:700, color: margenPct===null?'var(--muted)':margenPct<20?'var(--danger)':'var(--primary)', fontSize:'0.82rem' }}>
+                        {margenPct===null ? '—' : `${margenPct.toFixed(0)}%`}
+                      </td>
+                    )}
                     <td style={{ fontWeight:700 }}>{p.stock} {p.unidad==='kg'?'kg':'u.'}</td>
                     <td style={{ color:'var(--muted)' }}>{p.stockMinimo||0}</td>
                     <td>
@@ -291,11 +302,17 @@ export default function Productos() {
                 </select>
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:12 }}>
               <div className="form-group">
                 <label>Precio</label>
                 <input className="form-control" type="number" min="0" step="0.01" value={form.precio} onChange={e => setForm(f => ({...f, precio: e.target.value}))} placeholder="0" />
               </div>
+              {isAdmin && (
+                <div className="form-group">
+                  <label>Costo</label>
+                  <input className="form-control" type="number" min="0" step="0.01" value={form.costo} onChange={e => setForm(f => ({...f, costo: e.target.value}))} placeholder="0" />
+                </div>
+              )}
               <div className="form-group">
                 <label>Stock actual</label>
                 <input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm(f => ({...f, stock: e.target.value}))} placeholder="0" />

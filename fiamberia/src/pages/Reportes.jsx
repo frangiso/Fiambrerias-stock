@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Timestamp } from 'firebase/firestore'
-import { getReportes, anularVenta } from '../firebase/db.js'
+import { getReportes, anularVenta, getProductos, getClientes } from '../firebase/db.js'
 import { useApp } from '../context/AppContext.jsx'
 
 function exportarCSV(filas, columnas, nombreArchivo) {
@@ -22,8 +22,17 @@ export default function Reportes() {
   const [fechaDia, setFechaDia] = useState((() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })())
   const [fechaMes, setFechaMes] = useState(new Date().toISOString().slice(0,7))
   const [toast, setToast] = useState(null)
+  const [productosMap, setProductosMap] = useState({})
+  const [backupCargando, setBackupCargando] = useState(false)
 
   useEffect(() => { cargar() }, [tipoPeriodo, fechaDia, fechaMes])
+
+  // Costos actuales de los productos, para estimar margen — usa la misma
+  // caché que el resto de la app, no genera lecturas extra de Firestore.
+  useEffect(() => {
+    if (!isAdmin) return
+    getProductos(false).then(lista => setProductosMap(Object.fromEntries(lista.map(p => [p.id, p]))))
+  }, [isAdmin])
 
   function getRango() {
     if (tipoPeriodo === 'dia') {
@@ -97,6 +106,83 @@ export default function Reportes() {
     .filter(m => m.tipo === 'merma' || m.tipo === 'baja_producto')
     .slice().reverse()
 
+  // Ranking por empleado — si una misma persona concentra muchas más mermas
+  // o bajas que el resto, es una señal de alerta a investigar.
+  const rankingAuditoria = Object.values(
+    movimientosAuditoria.reduce((acc, m) => {
+      const key = m.registradoPor || 'Sin identificar'
+      if (!acc[key]) acc[key] = { registradoPor: key, mermas: 0, bajas: 0, total: 0 }
+      if (m.tipo === 'merma') acc[key].mermas++
+      else acc[key].bajas++
+      acc[key].total++
+      return acc
+    }, {})
+  ).sort((a,b) => b.total - a.total)
+
+  // Margen bruto estimado — ingresos de ventas vs. costo cargado en productos.
+  // Es una estimación: usa el costo actual, no el histórico al momento de la venta.
+  let ingresosPorVenta = 0, costoPorVenta = 0
+  if (isAdmin) {
+    ventasValidas.forEach(v => {
+      (v.items || []).forEach(i => {
+        ingresosPorVenta += (i.precio || 0) * i.cantidad
+        if (i.esReceta) {
+          (i.ingredientes || []).forEach(ing => {
+            costoPorVenta += (productosMap[ing.productoId]?.costo || 0) * ing.cantidad * i.cantidad
+          })
+        } else {
+          costoPorVenta += (productosMap[i.id]?.costo || 0) * i.cantidad
+        }
+      })
+    })
+  }
+  const margenBruto = ingresosPorVenta - costoPorVenta
+  const margenPct = ingresosPorVenta > 0 ? (margenBruto / ingresosPorVenta * 100) : 0
+  const hayCostosCargados = Object.values(productosMap).some(p => p.costo > 0)
+
+  async function descargarBackup() {
+    setBackupCargando(true)
+    try {
+      const [productosLista, clientesLista] = await Promise.all([getProductos(false), getClientes(false)])
+      exportarCSV(productosLista, [
+        { label:'Código', get: p => p.codigo||'' },
+        { label:'Nombre', get: p => p.nombre||'' },
+        { label:'Categoría', get: p => p.categoria||'' },
+        { label:'Unidad', get: p => p.unidad||'' },
+        { label:'Precio', get: p => p.precio||0 },
+        { label:'Costo', get: p => p.costo||0 },
+        { label:'Stock', get: p => p.stock||0 },
+        { label:'Stock mínimo', get: p => p.stockMinimo||0 },
+        { label:'Vencimiento', get: p => p.fechaVencimiento||'' },
+      ], 'backup_productos.csv')
+      exportarCSV(clientesLista, [
+        { label:'Nombre', get: c => c.nombre||'' },
+        { label:'Teléfono', get: c => c.telefono||'' },
+        { label:'Saldo', get: c => c.saldo||0 },
+      ], 'backup_clientes.csv')
+      exportarCSV(ventas, [
+        { label:'Fecha', get: v => formatFecha(v.fecha) },
+        { label:'Items', get: v => v.items?.length||0 },
+        { label:'Total', get: v => v.total ?? 0 },
+        { label:'Medio de pago', get: v => v.medioPago || 'Efectivo' },
+        { label:'Registrado por', get: v => v.registradoPor || '' },
+        { label:'Anulada', get: v => v.anulada ? 'SI' : 'NO' },
+      ], `backup_ventas_${labelPeriodo}.csv`)
+      exportarCSV(movimientosAuditoria, [
+        { label:'Fecha', get: m => formatFecha(m.fecha) },
+        { label:'Tipo', get: m => m.tipo },
+        { label:'Producto', get: m => m.productoNombre || '' },
+        { label:'Motivo', get: m => m.motivo || '' },
+        { label:'Registrado por', get: m => m.registradoPor || '' },
+      ], `backup_auditoria_${labelPeriodo}.csv`)
+      mostrarToast('✅ Backup descargado (4 archivos CSV)', 'success')
+    } catch (e) {
+      console.error('backup error:', e)
+      mostrarToast('❌ Error al generar el backup', 'danger')
+    }
+    setBackupCargando(false)
+  }
+
   function formatFecha(ts) {
     if (!ts) return '—'
     const d = ts.toDate ? ts.toDate() : new Date(ts)
@@ -111,9 +197,16 @@ export default function Reportes() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-title">Reportes</h1>
-        <p className="page-subtitle">{labelPeriodo}</p>
+      <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
+        <div>
+          <h1 className="page-title">Reportes</h1>
+          <p className="page-subtitle">{labelPeriodo}</p>
+        </div>
+        {isAdmin && (
+          <button className="btn btn-outline" onClick={descargarBackup} disabled={backupCargando}>
+            {backupCargando ? 'Generando...' : '📦 Backup completo (CSV)'}
+          </button>
+        )}
       </div>
 
       {/* Selector período */}
@@ -145,6 +238,9 @@ export default function Reportes() {
               { label:'Ingresos caja',      val:`$${ingresosCaja.toLocaleString('es-AR',{minimumFractionDigits:2})}`, color:'var(--primary)' },
               { label:'Egresos caja',       val:`$${egresosCaja.toLocaleString('es-AR',{minimumFractionDigits:2})}`, color:'var(--danger)' },
               { label:'Saldo caja',         val:`$${saldoCaja.toLocaleString('es-AR',{minimumFractionDigits:2})}`,   color: saldoCaja>=0?'var(--primary)':'var(--danger)' },
+              ...(isAdmin && hayCostosCargados ? [
+                { label:'Margen bruto estimado', val:`$${margenBruto.toLocaleString('es-AR',{minimumFractionDigits:2})} (${margenPct.toFixed(0)}%)`, color: margenBruto>=0?'var(--primary)':'var(--danger)' },
+              ] : []),
             ].map((s,i) => (
               <div key={i} className="card" style={{ textAlign:'center' }}>
                 <div style={{ fontSize:'1.3rem', fontWeight:800, color:s.color, lineHeight:1, marginBottom:4 }}>{s.val}</div>
@@ -273,6 +369,22 @@ export default function Reportes() {
                   )}>⬇️ CSV</button>
                 )}
               </div>
+              {rankingAuditoria.length > 0 && (
+                <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)' }}>
+                  <p style={{ fontSize:'0.78rem', color:'var(--muted)', fontWeight:600, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.04em' }}>
+                    Por empleado — si alguien concentra muchas más mermas/bajas que el resto, conviene revisar
+                  </p>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                    {rankingAuditoria.map(r => (
+                      <div key={r.registradoPor} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderRadius:9, background:'var(--bg)', border: r.total >= 3 && r.total === rankingAuditoria[0].total ? '1.5px solid var(--danger)' : '1px solid var(--border)' }}>
+                        <span style={{ fontWeight:700, fontSize:'0.85rem' }}>{r.registradoPor}</span>
+                        <span style={{ fontSize:'0.75rem', color:'var(--muted)' }}>{r.mermas} merma{r.mermas!==1?'s':''} · {r.bajas} baja{r.bajas!==1?'s':''}</span>
+                        <span className="badge badge-warning" style={{ fontSize:'0.7rem' }}>{r.total} total</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="table-wrap">
                 {movimientosAuditoria.length === 0
                   ? <div className="empty-state"><div className="empty-icon">🕵️</div><p>Sin mermas ni bajas en este período</p></div>
