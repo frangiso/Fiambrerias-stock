@@ -7,18 +7,20 @@ import { useCaja } from '../context/CajaContext.jsx'
 
 const TIPOS_INGRESO = ['Venta mostrador','Venta a crédito','Otro ingreso']
 const TIPOS_EGRESO  = ['Compra mercadería','Gasto operativo','Retiro de caja','Pago proveedor','Otro egreso']
+const MEDIOS_PAGO   = ['Efectivo','Tarjeta','Transferencia']
 
 export default function Caja() {
   const { verificarCaja } = useCaja()
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ concepto:'', monto:'', tipo:'' })
+  const [form, setForm] = useState({ concepto:'', monto:'', tipo:'', medioPago:'Efectivo' })
   const [toast, setToast] = useState(null)
   const [fecha, setFecha] = useState((() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })())
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [cajaCerrada, setCajaCerrada] = useState(false)
   const [montoApertura, setMontoApertura] = useState('')
+  const [efectivoContado, setEfectivoContado] = useState('')
 
   useEffect(() => { cargar() }, [fecha])
 
@@ -45,23 +47,30 @@ export default function Caja() {
   }
 
   async function cerrarCaja() {
-    if (!confirm('¿Cerrar la caja? Podés reabrirla cuando quieras.')) return
-    const nuevo = { concepto:`Cierre de caja — Saldo: $${saldo.toLocaleString('es-AR')}`, monto: saldo, tipo:'cierre', fecha: Timestamp.now() }
+    const contado = parseFloat(String(efectivoContado).replace(',','.'))
+    if (isNaN(contado) || contado < 0) { mostrarToast('Ingresá el efectivo contado', 'danger'); return }
+    const diferencia = contado - saldoEfectivo
+    const nuevo = {
+      concepto:`Cierre de caja — Sistema: $${saldo.toLocaleString('es-AR')} · Efectivo contado: $${contado.toLocaleString('es-AR')}`,
+      monto: saldo, tipo:'cierre', saldoSistema: saldo, saldoEfectivoSistema: saldoEfectivo,
+      efectivoContado: contado, diferencia, fecha: Timestamp.now()
+    }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
+    setModal(null); setEfectivoContado('')
     await cargar(true)
     verificarCaja()
-    mostrarToast('🔒 Caja cerrada', 'success')
+    mostrarToast(diferencia === 0 ? '🔒 Caja cerrada — cuadra perfecto' : `🔒 Caja cerrada — diferencia: $${diferencia.toLocaleString('es-AR')}`, diferencia === 0 ? 'success' : 'warning')
   }
 
   async function guardarMovimiento() {
     const monto = parseFloat(form.monto)
     if (!monto || monto <= 0) { mostrarToast('Ingresá un monto válido', 'danger'); return }
     if (!form.concepto.trim()) { mostrarToast('Ingresá un concepto', 'danger'); return }
-    const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, fecha: Timestamp.now() }
+    const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, medioPago: form.medioPago, fecha: Timestamp.now() }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`, 'reportes')
-    setModal(null); setForm({ concepto:'', monto:'', tipo:'' })
+    setModal(null); setForm({ concepto:'', monto:'', tipo:'', medioPago:'Efectivo' })
     await cargar(true)
     mostrarToast(`✅ ${modal==='ingreso'?'Ingreso':'Egreso'} registrado`, 'success')
   }
@@ -71,6 +80,11 @@ export default function Caja() {
   const ingresos = movimientos.filter(m => m.tipo==='ingreso'||m.tipo==='apertura').reduce((a,m) => a+m.monto, 0)
   const egresos  = movimientos.filter(m => m.tipo==='egreso').reduce((a,m) => a+m.monto, 0)
   const saldo    = ingresos - egresos
+  // Saldo solo en efectivo — lo que debería haber físicamente en el cajón
+  // (movimientos sin medioPago, como aperturas viejas o egresos, se asumen efectivo)
+  const ingresosEfectivo = movimientos.filter(m => (m.tipo==='ingreso'||m.tipo==='apertura') && (!m.medioPago || m.medioPago==='Efectivo')).reduce((a,m) => a+m.monto, 0)
+  const egresosEfectivo  = movimientos.filter(m => m.tipo==='egreso' && (!m.medioPago || m.medioPago==='Efectivo')).reduce((a,m) => a+m.monto, 0)
+  const saldoEfectivo    = ingresosEfectivo - egresosEfectivo
 
   function formatFecha(ts) {
     if (!ts) return '—'
@@ -96,9 +110,9 @@ export default function Caja() {
           )}
           {cajaAbierta && !cajaCerrada && (
             <>
-              <button className="btn btn-primary" onClick={() => { setForm({ concepto:'', monto:'', tipo:TIPOS_INGRESO[0] }); setModal('ingreso') }}>+ Ingreso</button>
-              <button className="btn btn-danger" onClick={() => { setForm({ concepto:'', monto:'', tipo:TIPOS_EGRESO[0] }); setModal('egreso') }}>− Egreso</button>
-              <button className="btn btn-outline" onClick={cerrarCaja}>🔒 Cerrar caja</button>
+              <button className="btn btn-primary" onClick={() => { setForm({ concepto:'', monto:'', tipo:TIPOS_INGRESO[0], medioPago:'Efectivo' }); setModal('ingreso') }}>+ Ingreso</button>
+              <button className="btn btn-danger" onClick={() => { setForm({ concepto:'', monto:'', tipo:TIPOS_EGRESO[0], medioPago:'Efectivo' }); setModal('egreso') }}>− Egreso</button>
+              <button className="btn btn-outline" onClick={() => { setEfectivoContado(''); setModal('cierre') }}>🔒 Cerrar caja</button>
             </>
           )}
           {cajaCerrada && <span style={{ fontSize:'0.85rem', color:'var(--muted)', background:'var(--bg)', padding:'8px 14px', borderRadius:8 }}>🔒 Caja cerrada</span>}
@@ -134,13 +148,14 @@ export default function Caja() {
         ) : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Ingreso</th><th>Egreso</th></tr></thead>
+              <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th>Ingreso</th><th>Egreso</th></tr></thead>
               <tbody>
                 {movimientos.map(m => (
                   <tr key={m.id}>
                     <td style={{ fontFamily:'monospace', fontSize:'0.82rem', color:'var(--muted)' }}>{formatFecha(m.fecha)}</td>
                     <td style={{ fontWeight:600 }}>{m.concepto}</td>
                     <td><span className="badge badge-ok" style={{ fontSize:'0.68rem' }}>{m.subtipo||m.tipo}</span></td>
+                    <td style={{ fontSize:'0.8rem', color:'var(--muted)' }}>{m.medioPago || (m.tipo==='cierre'?'—':'Efectivo')}</td>
                     <td style={{ fontWeight:700, color:'var(--primary)' }}>
                       {(m.tipo==='ingreso'||m.tipo==='apertura')?'$'+m.monto.toLocaleString('es-AR',{minimumFractionDigits:2}):'—'}
                     </td>
@@ -200,11 +215,51 @@ export default function Caja() {
                 value={form.monto} onChange={e => setForm(f => ({...f, monto:e.target.value}))}
                 placeholder="0" style={{ fontSize:'1.2rem', textAlign:'center' }} autoFocus />
             </div>
+            <div className="form-group">
+              <label>Medio de pago</label>
+              <select className="form-control" value={form.medioPago} onChange={e => setForm(f => ({...f, medioPago:e.target.value}))}>
+                {MEDIOS_PAGO.map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
               <button className={`btn ${modal==='ingreso'?'btn-primary':'btn-danger'}`} style={{flex:1}} onClick={guardarMovimiento}>
                 Registrar {modal==='ingreso'?'ingreso':'egreso'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'cierre' && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">🔒 Cierre de caja — Arqueo</h3>
+              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <p style={{ fontSize:'0.85rem', color:'var(--muted)', marginBottom:14 }}>
+              Saldo en efectivo según sistema: <strong>${saldoEfectivo.toLocaleString('es-AR',{minimumFractionDigits:2})}</strong>
+            </p>
+            <div className="form-group">
+              <label>Efectivo contado en el cajón ($)</label>
+              <input className="form-control" type="number" min="0" step="0.01" value={efectivoContado}
+                onChange={e => setEfectivoContado(e.target.value)} onKeyDown={e => e.key==='Enter' && cerrarCaja()}
+                placeholder="0" style={{ fontSize:'1.2rem', textAlign:'center' }} autoFocus />
+            </div>
+            {efectivoContado !== '' && !isNaN(parseFloat(efectivoContado)) && (
+              (() => {
+                const dif = parseFloat(efectivoContado) - saldoEfectivo
+                return (
+                  <div className={`alert ${dif===0?'alert-success':'alert-danger'}`}>
+                    {dif===0 ? '✅ Cuadra perfecto' : dif>0 ? `⚠️ Sobran $${dif.toLocaleString('es-AR',{minimumFractionDigits:2})}` : `⚠️ Faltan $${Math.abs(dif).toLocaleString('es-AR',{minimumFractionDigits:2})}`}
+                  </div>
+                )
+              })()
+            )}
+            <div style={{ display:'flex', gap:10, marginTop:8 }}>
+              <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" style={{flex:1}} onClick={cerrarCaja}>Confirmar cierre</button>
             </div>
           </div>
         </div>

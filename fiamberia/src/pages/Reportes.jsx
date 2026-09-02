@@ -1,13 +1,27 @@
 import { useState, useEffect } from 'react'
 import { Timestamp } from 'firebase/firestore'
-import { getReportes } from '../firebase/db.js'
+import { getReportes, anularVenta } from '../firebase/db.js'
+import { useApp } from '../context/AppContext.jsx'
+
+function exportarCSV(filas, columnas, nombreArchivo) {
+  const header = columnas.map(c => c.label).join(',')
+  const rows = filas.map(f => columnas.map(c => `"${String(c.get(f) ?? '').replace(/"/g,'""')}"`).join(','))
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = nombreArchivo; a.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function Reportes() {
+  const { isAdmin, user } = useApp()
   const [data, setData] = useState({ movimientos:[], ventas:[], caja:[] })
   const [loading, setLoading] = useState(true)
   const [tipoPeriodo, setTipoPeriodo] = useState('dia')
   const [fechaDia, setFechaDia] = useState((() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}` })())
   const [fechaMes, setFechaMes] = useState(new Date().toISOString().slice(0,7))
+  const [toast, setToast] = useState(null)
 
   useEffect(() => { cargar() }, [tipoPeriodo, fechaDia, fechaMes])
 
@@ -34,24 +48,44 @@ export default function Reportes() {
     return { desde: Timestamp.fromDate(d7), hasta: Timestamp.fromDate(hoy), key: 'semana' }
   }
 
-  async function cargar() {
+  async function cargar(force = false) {
     setLoading(true)
     const { desde, hasta, key } = getRango()
-    const result = await getReportes(desde, hasta, key)
+    const result = await getReportes(desde, hasta, key, force)
     setData(result)
     setLoading(false)
   }
 
+  async function handleAnular(venta) {
+    const motivo = prompt(`Anular venta de $${(venta.total||0).toLocaleString('es-AR')}.\n¿Motivo? (queda registrado en la auditoría)`)
+    if (motivo === null) return
+    if (!motivo.trim()) { mostrarToast('Necesitás indicar un motivo', 'danger'); return }
+    if (!confirm('¿Confirmás anular esta venta? Se repone el stock y se revierte el movimiento de caja/cuenta corriente. La venta original queda visible pero marcada como anulada.')) return
+    try {
+      await anularVenta(venta, motivo.trim(), user?.email)
+      mostrarToast('✅ Venta anulada', 'success')
+      cargar(true)
+    } catch (e) {
+      console.error('anularVenta error:', e)
+      mostrarToast('❌ Error al anular: ' + (e.message||''), 'danger')
+    }
+  }
+
+  function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3500) }
+
   const { movimientos, ventas, caja } = data
-  const totalVentas  = ventas.reduce((a,v) => a+(v.total||0), 0)
-  const cantVentas   = ventas.length
+  const ventasValidas = ventas.filter(v => !v.anulada)
+  const ventasAnuladasIds = new Set(ventas.filter(v => v.anulada).map(v => v.id))
+  const totalVentas  = ventasValidas.reduce((a,v) => a+(v.total||0), 0)
+  const cantVentas   = ventasValidas.length
   const ingresosCaja = caja.filter(m => m.tipo==='ingreso'||m.tipo==='apertura').reduce((a,m) => a+m.monto, 0)
   const egresosCaja  = caja.filter(m => m.tipo==='egreso').reduce((a,m) => a+m.monto, 0)
   const saldoCaja    = ingresosCaja - egresosCaja
 
-  // Top productos vendidos (solo movimientos de venta)
+  // Top productos vendidos (solo movimientos de venta, excluyendo ventas anuladas)
+  const movimientosValidos = movimientos.filter(m => m.tipo==='venta' && !ventasAnuladasIds.has(m.ventaId))
   const topProductos = Object.values(
-    movimientos.reduce((acc, m) => {
+    movimientosValidos.reduce((acc, m) => {
       if (!acc[m.productoId]) acc[m.productoId] = { nombre: m.productoNombre, cantidad:0, unidad: m.unidad }
       acc[m.productoId].cantidad += m.cantidad
       return acc
@@ -137,17 +171,49 @@ export default function Reportes() {
 
             {/* Últimas ventas */}
             <div className="card">
-              <h3 style={{ marginBottom:14, fontSize:'1rem', fontWeight:700 }}>🧾 Ventas del período</h3>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <h3 style={{ fontSize:'1rem', fontWeight:700 }}>🧾 Ventas del período</h3>
+                {ventas.length > 0 && (
+                  <button className="btn btn-outline btn-sm" onClick={() => exportarCSV(
+                    ventas.slice().reverse(),
+                    [
+                      { label:'Fecha', get: v => formatFecha(v.fecha) },
+                      { label:'Items', get: v => v.items?.length||0 },
+                      { label:'Subtotal', get: v => v.subtotal ?? v.total ?? 0 },
+                      { label:'Descuento', get: v => v.descuento ?? 0 },
+                      { label:'Total', get: v => v.total ?? 0 },
+                      { label:'Medio de pago', get: v => v.medioPago || 'Efectivo' },
+                      { label:'Cliente', get: v => v.clienteNombre || '' },
+                      { label:'Registrado por', get: v => v.registradoPor || '' },
+                      { label:'Anulada', get: v => v.anulada ? 'SI' : 'NO' },
+                      { label:'Motivo anulación', get: v => v.motivoAnulacion || '' },
+                    ],
+                    `ventas_${labelPeriodo}.csv`
+                  )}>⬇️ CSV</button>
+                )}
+              </div>
               {ventas.length === 0
                 ? <p style={{ color:'var(--muted)', fontSize:'0.85rem' }}>Sin ventas en este período</p>
                 : <div style={{ maxHeight:280, overflowY:'auto' }}>
                     {ventas.slice().reverse().slice(0,20).map(v => (
-                      <div key={v.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid var(--border)', fontSize:'0.82rem' }}>
+                      <div key={v.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid var(--border)', fontSize:'0.82rem', opacity: v.anulada ? 0.55 : 1 }}>
                         <div>
                           <div style={{ fontSize:'0.76rem', color:'var(--muted)' }}>{formatFecha(v.fecha)}</div>
-                          <div style={{ fontSize:'0.8rem' }}>{v.items?.length||0} ítem{v.items?.length!==1?'s':''}</div>
+                          <div style={{ fontSize:'0.8rem', textDecoration: v.anulada ? 'line-through' : 'none' }}>
+                            {v.items?.length||0} ítem{v.items?.length!==1?'s':''}
+                            {' '}<span className="badge" style={{ marginLeft:4, fontSize:'0.65rem' }}>{v.medioPago || 'Efectivo'}</span>
+                            {v.anulada && <span className="badge badge-danger" style={{ marginLeft:4, fontSize:'0.65rem' }}>ANULADA</span>}
+                          </div>
+                          {v.anulada && v.motivoAnulacion && (
+                            <div style={{ fontSize:'0.7rem', color:'var(--danger)' }}>Motivo: {v.motivoAnulacion}</div>
+                          )}
                         </div>
-                        <div style={{ fontWeight:800, color:'var(--primary)' }}>${(v.total||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ fontWeight:800, color:'var(--primary)', textDecoration: v.anulada ? 'line-through' : 'none' }}>${(v.total||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
+                          {isAdmin && !v.anulada && (
+                            <button className="btn btn-sm btn-outline" style={{ color:'var(--danger)', borderColor:'var(--danger)' }} onClick={() => handleAnular(v)}>Anular</button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -182,6 +248,7 @@ export default function Reportes() {
           </div>
         </>
       )}
+      {toast && <div className={`toast toast-${toast.tipo}`}>{toast.msg}</div>}
     </div>
   )
 }

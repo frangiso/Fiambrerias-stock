@@ -2,8 +2,20 @@ import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 
-const EMPTY = { nombre: '', categoria: '', precio: '', stock: '', stockMinimo: '', unidad: 'unidad' }
+const EMPTY = { nombre: '', categoria: '', precio: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '' }
+
+function exportarCSV(filas, columnas, nombreArchivo) {
+  const header = columnas.map(c => c.label).join(',')
+  const rows = filas.map(f => columnas.map(c => `"${String(c.get(f) ?? '').replace(/"/g,'""')}"`).join(','))
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = nombreArchivo; a.click()
+  URL.revokeObjectURL(url)
+}
 
 function generarCodigo(productos) {
   const nums = productos.map(p => parseInt(p.codigo || '0')).filter(n => !isNaN(n) && isFinite(n))
@@ -12,6 +24,7 @@ function generarCodigo(productos) {
 }
 
 export default function Productos() {
+  const { isAdmin } = useApp()
   const [productos, setProductos] = useState([])
   const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
@@ -70,7 +83,7 @@ export default function Productos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
 
   function abrirEditar(p) {
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad' })
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'' })
     setEditId(p.id); setModal(true)
   }
 
@@ -83,7 +96,8 @@ export default function Productos() {
       precio: parseFloat(form.precio)||0,
       stock: parseFloat(form.stock)||0,
       stockMinimo: parseFloat(form.stockMinimo)||0,
-      unidad: form.unidad
+      unidad: form.unidad,
+      fechaVencimiento: form.fechaVencimiento || null
     }
     try {
       if (editId) {
@@ -156,7 +170,21 @@ export default function Productos() {
           <p className="page-subtitle">El código interno se genera automáticamente · El precio es editable directo en la tabla</p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <button className="btn btn-outline" onClick={() => setModalAumento(true)}>📈 Actualizar precios</button>
+          <button className="btn btn-outline" onClick={() => exportarCSV(
+            productos,
+            [
+              { label:'Código', get: p => p.codigo||'' },
+              { label:'Nombre', get: p => p.nombre||'' },
+              { label:'Categoría', get: p => p.categoria||'' },
+              { label:'Unidad', get: p => p.unidad||'' },
+              { label:'Precio', get: p => p.precio||0 },
+              { label:'Stock', get: p => p.stock||0 },
+              { label:'Stock mínimo', get: p => p.stockMinimo||0 },
+              { label:'Vencimiento', get: p => p.fechaVencimiento||'' },
+            ],
+            'productos.csv'
+          )}>⬇️ CSV</button>
+          {isAdmin && <button className="btn btn-outline" onClick={() => setModalAumento(true)}>📈 Actualizar precios</button>}
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo producto</button>
         </div>
       </div>
@@ -176,10 +204,13 @@ export default function Productos() {
           ) : (
             <table>
               <thead>
-                <tr><th>Cód.</th><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Precio ($) — editable</th><th>Stock</th><th>Mín.</th><th></th></tr>
+                <tr><th>Cód.</th><th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Precio ($) — editable</th><th>Stock</th><th>Mín.</th><th>Vencimiento</th><th></th></tr>
               </thead>
               <tbody>
-                {filtrados.map(p => (
+                {filtrados.map(p => {
+                  const vencido = p.fechaVencimiento && new Date(p.fechaVencimiento) < new Date(new Date().toDateString())
+                  const porVencer = !vencido && p.fechaVencimiento && (new Date(p.fechaVencimiento) - new Date(new Date().toDateString())) <= 3*24*60*60*1000
+                  return (
                   <tr key={p.id}>
                     <td style={{ fontFamily:'monospace', color:'var(--muted)', fontSize:'0.82rem', fontWeight:700 }}>{p.codigo || '—'}</td>
                     <td style={{ fontWeight:600 }}>{p.nombre}</td>
@@ -195,13 +226,19 @@ export default function Productos() {
                     <td style={{ fontWeight:700 }}>{p.stock} {p.unidad==='kg'?'kg':'u.'}</td>
                     <td style={{ color:'var(--muted)' }}>{p.stockMinimo||0}</td>
                     <td>
+                      {p.fechaVencimiento
+                        ? <span className={`badge ${vencido?'badge-danger':porVencer?'badge-warning':'badge-ok'}`}>{p.fechaVencimiento}</span>
+                        : <span style={{ color:'var(--muted)' }}>—</span>}
+                    </td>
+                    <td>
                       <div style={{ display:'flex', gap:8 }}>
                         <button className="btn btn-sm btn-outline" onClick={() => abrirEditar(p)}>Editar</button>
-                        <button className="btn btn-sm btn-danger" onClick={() => eliminar(p)}>Borrar</button>
+                        {isAdmin && <button className="btn btn-sm btn-danger" onClick={() => eliminar(p)}>Borrar</button>}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -254,6 +291,10 @@ export default function Productos() {
                 <label>Stock mínimo</label>
                 <input className="form-control" type="number" min="0" value={form.stockMinimo} onChange={e => setForm(f => ({...f, stockMinimo: e.target.value}))} placeholder="0" />
               </div>
+            </div>
+            <div className="form-group">
+              <label>Fecha de vencimiento (opcional)</label>
+              <input className="form-control" type="date" value={form.fechaVencimiento} onChange={e => setForm(f => ({...f, fechaVencimiento: e.target.value}))} />
             </div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(false)}>Cancelar</button>

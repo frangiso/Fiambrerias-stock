@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { collection, doc, Timestamp, increment, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
-import { getProductos, getRecetas } from '../firebase/db.js'
+import { getProductos, getRecetas, getClientes } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 import './Ventas.css'
+
+const MEDIOS_PAGO = ['Efectivo', 'Tarjeta', 'Transferencia', 'Fiado']
 
 function parsearCodigoBalanza(codigo) {
   const str = codigo.toString().replace(/\D/g, '')
@@ -29,28 +32,43 @@ function imprimirTicket(venta, nombreLocal) {
       <td style="padding:4px 8px;border-bottom:1px dashed #ccc;text-align:right;font-weight:700">$${sub}</td>
     </tr>`
   }).join('')
+  const medioPagoLabel = venta.medioPago ? `<div class="sub">Medio de pago: ${venta.medioPago}</div>` : ''
+  const descuentoRow = venta.descuento > 0
+    ? `<div class="total-row" style="font-size:12px;font-weight:600;border:none;padding-top:0;margin-top:4px">
+        <span>Descuento</span><span>-$${venta.descuento.toLocaleString('es-AR',{minimumFractionDigits:2})}</span>
+      </div>`
+    : ''
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ticket</title>
   <style>body{font-family:monospace;font-size:13px;max-width:300px;margin:0 auto;padding:10px}
   h2{text-align:center;font-size:16px;margin-bottom:2px}.sub{text-align:center;color:#666;font-size:11px;margin-bottom:10px}
   .sep{border:none;border-top:2px dashed #333;margin:8px 0}table{width:100%;border-collapse:collapse;font-size:12px}
   th{text-align:left;padding:4px 8px;border-bottom:2px solid #333;font-size:11px}
   .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:900;margin-top:10px;padding-top:8px;border-top:2px solid #333}
-  .gracias{text-align:center;margin-top:12px;font-size:11px;color:#666}</style>
+  .gracias{text-align:center;margin-top:12px;font-size:11px;color:#666}
+  .disclaimer{text-align:center;margin-top:14px;padding-top:10px;border-top:1px dashed #999;font-size:11px;font-weight:700;color:#333;letter-spacing:0.02em}
+  </style>
   </head><body>
   <h2>${nombreLocal||'Fiambería La Picadita'}</h2>
-  <div class="sub">${fecha}</div><hr class="sep">
+  <div class="sub">${fecha}</div>
+  ${medioPagoLabel}
+  <hr class="sep">
   <table><thead><tr><th>Producto</th><th style="text-align:center">Cant.</th><th style="text-align:right">P.Unit</th><th style="text-align:right">Subtotal</th></tr></thead>
   <tbody>${items}</tbody></table>
+  ${descuentoRow}
   <div class="total-row"><span>TOTAL</span><span>$${venta.total.toLocaleString('es-AR',{minimumFractionDigits:2})}</span></div>
-  <div class="gracias">¡Gracias por su compra!</div></body></html>`
+  <div class="gracias">¡Gracias por su compra!</div>
+  <div class="disclaimer">DOCUMENTO NO VÁLIDO COMO FACTURA</div>
+  </body></html>`
   const win = window.open('','_blank','width=400,height=600')
   win.document.write(html); win.document.close(); win.focus()
   setTimeout(() => win.print(), 400)
 }
 
 export default function Ventas() {
+  const { user } = useApp()
   const [productos, setProductos] = useState([])
   const [recetas, setRecetas] = useState([])
+  const [clientes, setClientes] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState([])
   const [sugerencias, setSugerencias] = useState([])
@@ -60,6 +78,9 @@ export default function Ventas() {
   const [toast, setToast] = useState(null)
   const [nombreLocal, setNombreLocal] = useState(localStorage.getItem('nombreLocal') || 'Fiambería La Picadita')
   const [ultimaVenta, setUltimaVenta] = useState(null)
+  const [medioPago, setMedioPago] = useState('Efectivo')
+  const [descuento, setDescuento] = useState('')
+  const [clienteId, setClienteId] = useState('')
   const inputRef = useRef()
   const barcodeBuffer = useRef('')
   const barcodeTimer = useRef(null)
@@ -68,12 +89,14 @@ export default function Ventas() {
 
   async function cargarDatos(force = false) {
     // Usa caché — no re-lee si no es necesario
-    const [prods, recs] = await Promise.all([
+    const [prods, recs, clis] = await Promise.all([
       getProductos(force),
-      getRecetas(force)
+      getRecetas(force),
+      getClientes(force)
     ])
     setProductos(prods)
     setRecetas(recs)
+    setClientes(clis)
   }
 
   useEffect(() => {
@@ -147,13 +170,19 @@ export default function Ventas() {
   }
 
   function quitarItem(id) { setCarrito(prev => prev.filter(i => i.id !== id)) }
-  function calcularTotal() { return carrito.reduce((acc, i) => acc + (i.precio||0) * i.cantidad, 0) }
+  function calcularSubtotal() { return carrito.reduce((acc, i) => acc + (i.precio||0) * i.cantidad, 0) }
+  function calcularDescuento() { return Math.min(parseFloat(descuento) || 0, calcularSubtotal()) }
+  function calcularTotal() { return calcularSubtotal() - calcularDescuento() }
 
   async function confirmarVenta() {
     if (!carrito.length) return
+    if (medioPago === 'Fiado' && !clienteId) { mostrarToast('⚠️ Elegí un cliente para el fiado', 'danger'); return }
     setLoading(true)
-    const totalFinal = calcularTotal()
+    const subtotal = calcularSubtotal()
+    const descuentoFinal = calcularDescuento()
+    const totalFinal = subtotal - descuentoFinal
     const itemsSnapshot = [...carrito]
+    const clienteSel = clientes.find(c => c.id === clienteId)
 
     try {
       // Verificar stock
@@ -196,16 +225,26 @@ export default function Ventas() {
       // Venta
       const ventaRef = doc(collection(db, 'ventas'))
       batch.set(ventaRef, {
-        items: itemsSnapshot.map(i => ({ id:i.id, nombre:i.nombre, cantidad:i.cantidad, unidad:i.unidad, precio:i.precio||0, esReceta:i.esReceta||false })),
-        total: totalFinal, fecha: Timestamp.now()
+        items: itemsSnapshot.map(i => ({
+          id:i.id, nombre:i.nombre, cantidad:i.cantidad, unidad:i.unidad, precio:i.precio||0,
+          esReceta:i.esReceta||false, ingredientes: i.esReceta ? (i.ingredientes||[]) : null
+        })),
+        subtotal, descuento: descuentoFinal, total: totalFinal,
+        medioPago, clienteId: medioPago==='Fiado' ? clienteId : null, clienteNombre: medioPago==='Fiado' ? (clienteSel?.nombre||null) : null,
+        registradoPor: user?.email || null, anulada: false, fecha: Timestamp.now()
       })
 
-      // Caja — ingreso automático
-      const cajaRef = doc(collection(db, 'caja'))
-      batch.set(cajaRef, {
-        concepto: `Venta — ${itemsSnapshot.map(i => i.nombre).join(', ')}`,
-        monto: totalFinal, tipo:'ingreso', subtipo:'Venta mostrador', fecha: Timestamp.now()
-      })
+      if (medioPago === 'Fiado') {
+        // No entra efectivo a caja — se acumula como deuda del cliente
+        batch.update(doc(db, 'clientes', clienteId), { saldo: increment(totalFinal) })
+      } else {
+        // Caja — ingreso automático
+        const cajaRef = doc(collection(db, 'caja'))
+        batch.set(cajaRef, {
+          concepto: `Venta — ${itemsSnapshot.map(i => i.nombre).join(', ')}`,
+          monto: totalFinal, tipo:'ingreso', subtipo:'Venta mostrador', medioPago, ventaId: ventaRef.id, fecha: Timestamp.now()
+        })
+      }
 
       await batch.commit()
 
@@ -219,15 +258,18 @@ export default function Ventas() {
           })
         }
       })
-      // Invalidar caja y reportes (nueva venta)
+      // Invalidar caja, reportes y (si fue fiado) clientes
       invalidateCache('caja', 'reportes')
+      if (medioPago === 'Fiado') invalidateCache('clientes')
 
-      const ventaData = { items: itemsSnapshot, total: totalFinal }
+      const ventaData = { items: itemsSnapshot, subtotal, descuento: descuentoFinal, total: totalFinal, medioPago }
       setUltimaVenta(ventaData)
-      setCarrito([])
-      // Refrescar productos desde caché actualizada (sin leer Firestore)
+      setCarrito([]); setDescuento(''); setClienteId(''); setMedioPago('Efectivo')
+      // Refrescar productos (y clientes si aplica) desde caché actualizada
       setProductos(await getProductos(false))
+      if (medioPago === 'Fiado') setClientes(await getClientes(false))
       mostrarToast('✅ Venta registrada', 'success')
+      imprimirTicket(ventaData, nombreLocal)
     } catch (e) {
       console.error('confirmarVenta error:', e)
       mostrarToast('❌ Error: ' + (e.message || 'Error al registrar'), 'danger')
@@ -339,11 +381,39 @@ export default function Ventas() {
           </div>
         )}
         <div className="carrito-footer">
+          {carrito.length > 0 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <label style={{ fontSize:'0.78rem', color:'var(--muted)', fontWeight:600, minWidth:70 }}>Descuento</label>
+                <input className="form-control" type="number" min="0" step="0.01" placeholder="$ 0"
+                  value={descuento} onChange={e => setDescuento(e.target.value)} style={{ marginBottom:0 }} />
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {MEDIOS_PAGO.map(m => (
+                  <button key={m} className={`btn btn-sm ${medioPago===m?'btn-primary':'btn-outline'}`}
+                    onClick={() => { setMedioPago(m); if (m!=='Fiado') setClienteId('') }}>{m}</button>
+                ))}
+              </div>
+              {medioPago === 'Fiado' && (
+                <select className="form-control" value={clienteId} onChange={e => setClienteId(e.target.value)}>
+                  <option value="">Seleccioná un cliente...</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+          {calcularDescuento() > 0 && (
+            <div className="total-row" style={{ fontSize:'0.85rem', fontWeight:600 }}>
+              <span>Descuento</span>
+              <span>-${calcularDescuento().toLocaleString('es-AR',{minimumFractionDigits:2})}</span>
+            </div>
+          )}
           <div className="total-row">
             <span>Total</span>
             <span className="total-amount">${calcularTotal().toLocaleString('es-AR',{minimumFractionDigits:2})}</span>
           </div>
-          <button className="btn btn-primary btn-block confirmar-btn" onClick={confirmarVenta} disabled={!carrito.length||loading}>
+          <button className="btn btn-primary btn-block confirmar-btn" onClick={confirmarVenta}
+            disabled={!carrito.length||loading||(medioPago==='Fiado'&&!clienteId)}>
             {loading ? 'Registrando...' : '✅ Confirmar Venta'}
           </button>
           {ultimaVenta && (

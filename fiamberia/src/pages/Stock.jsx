@@ -11,6 +11,9 @@ export default function Stock() {
   const [busqueda, setBusqueda] = useState('')
   const [modalCarga, setModalCarga] = useState(null)
   const [cantidadCarga, setCantidadCarga] = useState('')
+  const [modalMerma, setModalMerma] = useState(null)
+  const [cantidadMerma, setCantidadMerma] = useState('')
+  const [motivoMerma, setMotivoMerma] = useState('')
   const [toast, setToast] = useState(null)
 
   useEffect(() => { cargar() }, [])
@@ -27,9 +30,21 @@ export default function Stock() {
     return 'ok'
   }
 
+  function getEstadoVencimiento(p) {
+    if (!p.fechaVencimiento) return null
+    const hoy = new Date(new Date().toDateString())
+    const venc = new Date(p.fechaVencimiento)
+    if (venc < hoy) return 'vencido'
+    if ((venc - hoy) <= 3*24*60*60*1000) return 'porVencer'
+    return null
+  }
+
   const filtrados = productos.filter(p => {
     const estado = getEstado(p)
+    const estadoVenc = getEstadoVencimiento(p)
     const matchFiltro = filtro === 'todos' || estado === filtro
+      || (filtro === 'vencidos' && estadoVenc === 'vencido')
+      || (filtro === 'porVencer' && estadoVenc === 'porVencer')
     const matchBusqueda = !busqueda || p.nombre?.toLowerCase().includes(busqueda.toLowerCase())
     return matchFiltro && matchBusqueda
   })
@@ -39,6 +54,8 @@ export default function Stock() {
     sin:   productos.filter(p => p.stock <= 0).length,
     bajo:  productos.filter(p => p.stock > 0 && p.stock <= (p.stockMinimo||0)).length,
     ok:    productos.filter(p => p.stock > (p.stockMinimo||0)).length,
+    vencidos:  productos.filter(p => getEstadoVencimiento(p) === 'vencido').length,
+    porVencer: productos.filter(p => getEstadoVencimiento(p) === 'porVencer').length,
   }
 
   async function cargarStock() {
@@ -58,6 +75,24 @@ export default function Stock() {
     } catch { mostrarToast('❌ Error al actualizar stock', 'danger') }
   }
 
+  async function registrarMerma() {
+    const cant = parseFloat(cantidadMerma.replace(',','.'))
+    if (!cant || cant <= 0) return
+    if (!motivoMerma.trim()) { mostrarToast('Indicá el motivo de la merma', 'danger'); return }
+    if (cant > modalMerma.stock) { mostrarToast('No podés dar de baja más de lo que hay en stock', 'danger'); return }
+    try {
+      await updateDoc(doc(db, 'productos', modalMerma.id), { stock: increment(-cant) })
+      await addDoc(collection(db, 'movimientos'), {
+        productoId: modalMerma.id, productoNombre: modalMerma.nombre,
+        tipo: 'merma', cantidad: cant, unidad: modalMerma.unidad, motivo: motivoMerma.trim(), fecha: Timestamp.now()
+      })
+      updateCacheItem('productos', modalMerma.id, p => ({ ...p, stock: p.stock - cant }))
+      setProductos(await getProductos(false))
+      mostrarToast(`🗑️ Merma registrada: -${cant} ${modalMerma.unidad==='kg'?'kg':'u.'}`, 'warning')
+      setModalMerma(null); setCantidadMerma(''); setMotivoMerma('')
+    } catch { mostrarToast('❌ Error al registrar la merma', 'danger') }
+  }
+
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3000) }
   function formatStock(p) { return p.unidad==='kg' ? `${p.stock} kg` : `${p.stock} u.` }
 
@@ -70,9 +105,11 @@ export default function Stock() {
 
       {counts.sin > 0 && <div className="alert alert-danger">⛔ <strong>{counts.sin} producto{counts.sin>1?'s':''} sin stock</strong></div>}
       {counts.bajo > 0 && <div className="alert alert-warning">⚠️ <strong>{counts.bajo} con stock bajo</strong> — revisá y cargá mercadería</div>}
+      {counts.vencidos > 0 && <div className="alert alert-danger">🗓️ <strong>{counts.vencidos} producto{counts.vencidos>1?'s':''} vencido{counts.vencidos>1?'s':''}</strong> — registrá la merma correspondiente</div>}
+      {counts.porVencer > 0 && <div className="alert alert-warning">⏳ <strong>{counts.porVencer} por vencer</strong> en los próximos 3 días</div>}
 
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-        {[['todos',`Todos (${counts.todos})`],['sin',`Sin stock (${counts.sin})`],['bajo',`Bajo (${counts.bajo})`],['ok',`OK (${counts.ok})`]].map(([k,l]) => (
+        {[['todos',`Todos (${counts.todos})`],['sin',`Sin stock (${counts.sin})`],['bajo',`Bajo (${counts.bajo})`],['ok',`OK (${counts.ok})`],['vencidos',`Vencidos (${counts.vencidos})`],['porVencer',`Por vencer (${counts.porVencer})`]].map(([k,l]) => (
           <button key={k} className={`btn btn-sm ${filtro===k?'btn-primary':'btn-outline'}`} onClick={() => setFiltro(k)}>{l}</button>
         ))}
         <input className="form-control" style={{ maxWidth:220, marginLeft:'auto' }} placeholder="Buscar..."
@@ -87,10 +124,11 @@ export default function Stock() {
             <div className="empty-state"><div className="empty-icon">📦</div><p>No hay productos en esta categoría</p></div>
           ) : (
             <table>
-              <thead><tr><th>Producto</th><th>Categoría</th><th>Unidad</th><th>Stock actual</th><th>Mínimo</th><th>Estado</th><th>Acción</th></tr></thead>
+              <thead><tr><th>Producto</th><th>Categoría</th><th>Unidad</th><th>Stock actual</th><th>Mínimo</th><th>Estado</th><th>Vencimiento</th><th>Acción</th></tr></thead>
               <tbody>
                 {filtrados.map(p => {
                   const estado = getEstado(p)
+                  const estadoVenc = getEstadoVencimiento(p)
                   return (
                     <tr key={p.id}>
                       <td style={{ fontWeight:600 }}>{p.nombre}</td>
@@ -104,7 +142,15 @@ export default function Stock() {
                         </span>
                       </td>
                       <td>
-                        <button className="btn btn-sm btn-outline" onClick={() => { setModalCarga(p); setCantidadCarga('') }}>+ Cargar</button>
+                        {p.fechaVencimiento
+                          ? <span className={`badge ${estadoVenc==='vencido'?'badge-danger':estadoVenc==='porVencer'?'badge-warning':'badge-ok'}`}>{p.fechaVencimiento}</span>
+                          : <span style={{ color:'var(--muted)' }}>—</span>}
+                      </td>
+                      <td>
+                        <div style={{ display:'flex', gap:8 }}>
+                          <button className="btn btn-sm btn-outline" onClick={() => { setModalCarga(p); setCantidadCarga('') }}>+ Cargar</button>
+                          <button className="btn btn-sm btn-outline" style={{ color:'var(--danger)', borderColor:'var(--danger)' }} onClick={() => { setModalMerma(p); setCantidadMerma(''); setMotivoMerma('') }}>🗑️ Merma</button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -134,6 +180,34 @@ export default function Stock() {
             <div style={{ display:'flex', gap:10 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModalCarga(null)}>Cancelar</button>
               <button className="btn btn-primary" style={{flex:1}} onClick={cargarStock}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modalMerma && (
+        <div className="modal-overlay" onClick={() => setModalMerma(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Registrar merma — {modalMerma.nombre}</h3>
+              <button className="modal-close" onClick={() => setModalMerma(null)}>✕</button>
+            </div>
+            <p style={{ fontSize:'0.85rem', color:'var(--muted)', marginBottom:16 }}>Stock actual: <strong>{formatStock(modalMerma)}</strong></p>
+            <div className="form-group">
+              <label>Cantidad a dar de baja ({modalMerma.unidad==='kg'?'kg':'unidades'})</label>
+              <input className="form-control" style={{ fontSize:'1.2rem', textAlign:'center' }}
+                type="number" step={modalMerma.unidad==='kg'?'0.1':'1'} min="0"
+                placeholder={modalMerma.unidad==='kg'?'Ej: 1.2':'Ej: 3'}
+                value={cantidadMerma} onChange={e => setCantidadMerma(e.target.value)} autoFocus />
+            </div>
+            <div className="form-group">
+              <label>Motivo</label>
+              <input className="form-control" placeholder="Ej: vencido, roto, robo, error de conteo..."
+                value={motivoMerma} onChange={e => setMotivoMerma(e.target.value)}
+                onKeyDown={e => e.key==='Enter' && registrarMerma()} />
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button className="btn btn-outline" style={{flex:1}} onClick={() => setModalMerma(null)}>Cancelar</button>
+              <button className="btn btn-primary" style={{flex:1}} onClick={registrarMerma}>Confirmar baja</button>
             </div>
           </div>
         </div>

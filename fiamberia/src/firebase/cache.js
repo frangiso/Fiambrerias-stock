@@ -11,6 +11,7 @@ const TTL = {
   compras:    5 * 60 * 1000,  // 5 min
   caja:       2 * 60 * 1000,  // 2 min — cambia seguido
   reportes:   3 * 60 * 1000,  // 3 min
+  clientes:   5 * 60 * 1000,  // 5 min
   default:    5 * 60 * 1000,
 }
 

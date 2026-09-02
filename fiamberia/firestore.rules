@@ -1,0 +1,118 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estaLogueado() {
+      return request.auth != null;
+    }
+
+    function rolUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol;
+    }
+
+    function esAdmin() {
+      return estaLogueado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && rolUsuario() == 'admin';
+    }
+
+    // ---------------------------------------------------------------
+    // usuarios: cada usuario puede crear (una sola vez) su propio doc
+    // como 'cajero'. Ascender a admin (o degradar) solo lo puede hacer
+    // otro admin. Nadie puede auto-ascenderse.
+    // ---------------------------------------------------------------
+    match /usuarios/{uid} {
+      allow read: if estaLogueado();
+      allow create: if estaLogueado()
+        && request.auth.uid == uid
+        && request.resource.data.rol == 'cajero';
+      allow update: if esAdmin();
+      allow delete: if esAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // productos / rubros / recetas: cualquier usuario logueado puede
+    // leer y crear/editar (stock, precios, etc). Borrar solo admin,
+    // para evitar pérdida accidental o maliciosa de catálogo.
+    // ---------------------------------------------------------------
+    match /productos/{id} {
+      allow read: if estaLogueado();
+      allow create, update: if estaLogueado();
+      allow delete: if esAdmin();
+    }
+
+    match /rubros/{id} {
+      allow read: if estaLogueado();
+      allow create, update: if estaLogueado();
+      allow delete: if esAdmin();
+    }
+
+    match /recetas/{id} {
+      allow read: if estaLogueado();
+      allow create, update: if estaLogueado();
+      allow delete: if esAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // ventas: se crean al vender. Nunca se borran. La única
+    // modificación permitida es la anulación (marcar anulada:true),
+    // reservada a admin, para que quede registrado quién y por qué.
+    // ---------------------------------------------------------------
+    match /ventas/{id} {
+      allow read: if estaLogueado();
+      allow create: if estaLogueado();
+      allow update: if esAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['anulada', 'motivoAnulacion', 'anuladaPor', 'anuladaFecha']);
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // movimientos: registro de auditoría de stock (ventas, compras,
+    // anulaciones, mermas). Solo se crean, nunca se editan ni borran.
+    // ---------------------------------------------------------------
+    match /movimientos/{id} {
+      allow read: if estaLogueado();
+      allow create: if estaLogueado();
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // caja: registro de auditoría de ingresos/egresos/cierres. Solo
+    // se crean documentos nuevos (incluso las anulaciones y cierres
+    // de caja se guardan como nuevo movimiento), nunca se editan ni
+    // borran, para mantener el arqueo confiable.
+    // ---------------------------------------------------------------
+    match /caja/{id} {
+      allow read: if estaLogueado();
+      allow create: if estaLogueado();
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // compras: alta libre para cualquier usuario logueado. Borrar
+    // reservado a admin.
+    // ---------------------------------------------------------------
+    match /compras/{id} {
+      allow read: if estaLogueado();
+      allow create, update: if estaLogueado();
+      allow delete: if esAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // clientes (cuenta corriente / fiado): lectura y alta/edición de
+    // saldo para cualquier usuario logueado. Borrar solo admin.
+    // ---------------------------------------------------------------
+    match /clientes/{id} {
+      allow read: if estaLogueado();
+      allow create, update: if estaLogueado();
+      allow delete: if esAdmin();
+    }
+
+    // Por defecto, todo lo demás queda bloqueado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

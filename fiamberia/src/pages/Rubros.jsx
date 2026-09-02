@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { invalidateCache } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 
 const COLORES = ['#2A5C45','#C9736A','#C9A84C','#4A7AB5','#8B5CF6','#EC4899','#F97316','#64748B']
 
 export default function Rubros() {
+  const { isAdmin } = useApp()
   const [rubros, setRubros] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
@@ -75,7 +77,7 @@ export default function Rubros() {
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 <button className="btn btn-sm btn-outline" onClick={() => abrirEditar(r)}>✏️</button>
-                <button className="btn btn-sm btn-danger" onClick={() => eliminar(r)}>🗑</button>
+                {isAdmin && <button className="btn btn-sm btn-danger" onClick={() => eliminar(r)}>🗑</button>}
               </div>
             </div>
           ))}
