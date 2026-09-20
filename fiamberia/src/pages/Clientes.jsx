@@ -82,7 +82,7 @@ export default function Clientes() {
       <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
         <div>
           <h1 className="page-title">Clientes / Cuenta corriente</h1>
-          <p className="page-subtitle">Gestioná el fiado — deuda total: <strong>${deudaTotal.toLocaleString('es-AR',{minimumFractionDigits:2})}</strong></p>
+          <p className="page-subtitle">Anotá lo que cada cliente te debe (fiado) y registrá cuando te pagan — deuda total: <strong>${deudaTotal.toLocaleString('es-AR',{minimumFractionDigits:2})}</strong></p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo cliente</button>
       </div>

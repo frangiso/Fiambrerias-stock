@@ -200,7 +200,7 @@ export default function Reportes() {
       <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
         <div>
           <h1 className="page-title">Reportes</h1>
-          <p className="page-subtitle">{labelPeriodo}</p>
+          <p className="page-subtitle">Ventas, ganancias y auditoría del período — {labelPeriodo}</p>
         </div>
         {isAdmin && (
           <button className="btn btn-outline" onClick={descargarBackup} disabled={backupCargando}>

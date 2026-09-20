@@ -55,7 +55,7 @@ export default function Rubros() {
       <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
         <div>
           <h1 className="page-title">Rubros / Categorías</h1>
-          <p className="page-subtitle">Gestioná las categorías de productos</p>
+          <p className="page-subtitle">Los grupos para organizar el catálogo (Fiambres, Quesos, etc.) — se usan al crear productos y filtrar</p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo rubro</button>
       </div>

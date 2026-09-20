@@ -305,7 +305,7 @@ export default function Ventas() {
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
             <div>
               <h1 className="page-title">Panel de Ventas</h1>
-              <p className="page-subtitle">Buscá, tipeá código o escaneá</p>
+              <p className="page-subtitle">Cargá la venta acá: buscá, tipeá código o escaneá con el lector — descuenta stock solo</p>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <input style={{ padding:'6px 10px', border:'1px solid var(--border)', borderRadius:8, fontSize:'0.82rem', width:200 }}

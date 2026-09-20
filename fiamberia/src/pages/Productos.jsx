@@ -4,7 +4,7 @@ import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
 
-const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '', codigo: '' }
+const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', margen: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '', codigo: '' }
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -83,18 +83,34 @@ export default function Productos() {
   function abrirNuevo() { setForm(EMPTY); setEditId(null); setModal(true) }
 
   function abrirEditar(p) {
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'', codigo: p.codigo||'' })
+    const margenCalc = p.precio > 0 && p.costo > 0 ? (((p.precio - p.costo) / p.precio) * 100).toFixed(1) : ''
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', margen: margenCalc, stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'', codigo: p.codigo||'' })
     setEditId(p.id); setModal(true)
+  }
+
+  // Si cargan costo + margen de ganancia, calcula el precio solo.
+  // Igual se puede tipear el precio directo, sin costo ni margen.
+  function actualizarCostoMargen(campo, valor) {
+    setForm(f => {
+      const next = { ...f, [campo]: valor }
+      const costo = parseFloat(campo === 'costo' ? valor : f.costo)
+      const margen = parseFloat(campo === 'margen' ? valor : f.margen)
+      if (costo > 0 && margen >= 0 && margen < 100) {
+        next.precio = (costo / (1 - margen / 100)).toFixed(2)
+      }
+      return next
+    })
   }
 
   async function guardar() {
     if (!form.nombre.trim()) { mostrarToast('El nombre es obligatorio', 'danger'); return }
     const codigoManual = form.codigo.trim()
-    if (editId && !codigoManual) { mostrarToast('El código no puede quedar vacío', 'danger'); return }
     if (codigoManual && productos.some(p => p.codigo === codigoManual && p.id !== editId)) {
       mostrarToast(`Ya existe un producto con el código "${codigoManual}"`, 'danger'); return
     }
     setGuardando(true)
+    // Código propio es opcional: si lo dejan vacío, se mantiene el actual (al editar) o se autogenera (al crear)
+    const codigoActual = editId ? productos.find(p => p.id === editId)?.codigo : null
     const data = {
       nombre: form.nombre.trim(),
       categoria: form.categoria,
@@ -105,8 +121,7 @@ export default function Productos() {
       unidad: form.unidad,
       fechaVencimiento: form.fechaVencimiento || null,
       codigoBarra: form.codigoBarra.trim() || null,
-      // Código propio si lo cargaron, si no se autogenera uno único
-      codigo: codigoManual || generarCodigo(productos)
+      codigo: codigoManual || codigoActual || generarCodigo(productos)
     }
     try {
       if (editId) {
@@ -187,7 +202,7 @@ export default function Productos() {
       <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
         <div>
           <h1 className="page-title">Productos</h1>
-          <p className="page-subtitle">El código interno se genera automáticamente · El precio es editable directo en la tabla</p>
+          <p className="page-subtitle">Tu catálogo: creá, editá y fijá precios — el precio también se puede editar directo en la tabla</p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
           <button className="btn btn-outline" onClick={() => exportarCSV(
@@ -295,8 +310,8 @@ export default function Productos() {
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group">
-                <label>Código propio {!editId && '(opcional)'}</label>
-                <input className="form-control" value={form.codigo} onChange={e => setForm(f => ({...f, codigo: e.target.value}))} placeholder={editId ? '' : 'Se autogenera si lo dejás vacío'} />
+                <label>Código propio (opcional)</label>
+                <input className="form-control" value={form.codigo} onChange={e => setForm(f => ({...f, codigo: e.target.value}))} placeholder={editId ? 'Se mantiene el actual si lo dejás vacío' : 'Se autogenera si lo dejás vacío'} />
               </div>
               <div className="form-group">
                 <label>Código de barras (opcional)</label>
@@ -319,17 +334,24 @@ export default function Productos() {
                 </select>
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:12 }}>
+            {isAdmin && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="form-group">
+                  <label>Costo</label>
+                  <input className="form-control" type="number" min="0" step="0.01" value={form.costo} onChange={e => actualizarCostoMargen('costo', e.target.value)} placeholder="0" />
+                </div>
+                <div className="form-group">
+                  <label>Margen de ganancia (%)</label>
+                  <input className="form-control" type="number" min="0" max="99" step="0.1" value={form.margen} onChange={e => actualizarCostoMargen('margen', e.target.value)} placeholder="Ej: 40" />
+                </div>
+              </div>
+            )}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
               <div className="form-group">
                 <label>Precio</label>
                 <input className="form-control" type="number" min="0" step="0.01" value={form.precio} onChange={e => setForm(f => ({...f, precio: e.target.value}))} placeholder="0" />
+                {isAdmin && <p style={{ fontSize:'0.7rem', color:'var(--muted)', marginTop:4 }}>Se calcula solo con costo + margen, o cargalo directo</p>}
               </div>
-              {isAdmin && (
-                <div className="form-group">
-                  <label>Costo</label>
-                  <input className="form-control" type="number" min="0" step="0.01" value={form.costo} onChange={e => setForm(f => ({...f, costo: e.target.value}))} placeholder="0" />
-                </div>
-              )}
               <div className="form-group">
                 <label>Stock actual</label>
                 <input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm(f => ({...f, stock: e.target.value}))} placeholder="0" />

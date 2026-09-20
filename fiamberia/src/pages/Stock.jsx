@@ -104,7 +104,7 @@ export default function Stock() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Stock</h1>
-        <p className="page-subtitle">Control de inventario</p>
+        <p className="page-subtitle">Cargá mercadería que llega y registrá mermas (roturas, vencidos) — queda todo auditado</p>
       </div>
 
       {counts.sin > 0 && <div className="alert alert-danger">⛔ <strong>{counts.sin} producto{counts.sin>1?'s':''} sin stock</strong></div>}

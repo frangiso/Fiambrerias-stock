@@ -100,7 +100,7 @@ export default function Caja() {
       <div className="page-header" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
         <div>
           <h1 className="page-title">Caja</h1>
-          <p className="page-subtitle">Control de entradas y salidas</p>
+          <p className="page-subtitle">Registrá ingresos y egresos de efectivo (fuera de una venta) y hacé el arqueo al cerrar el turno</p>
         </div>
         <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
