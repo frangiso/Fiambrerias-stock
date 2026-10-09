@@ -110,25 +110,40 @@ export default function Productos() {
     }
     setGuardando(true)
     // Código propio es opcional: si lo dejan vacío, se mantiene el actual (al editar) o se autogenera (al crear)
-    const codigoActual = editId ? productos.find(p => p.id === editId)?.codigo : null
+    const original = editId ? productos.find(p => p.id === editId) : null
     const data = {
       nombre: form.nombre.trim(),
       categoria: form.categoria,
       precio: parseFloat(form.precio)||0,
       costo: parseFloat(form.costo)||0,
-      stock: parseFloat(form.stock)||0,
       stockMinimo: parseFloat(form.stockMinimo)||0,
       unidad: form.unidad,
       fechaVencimiento: form.fechaVencimiento || null,
       codigoBarra: form.codigoBarra.trim() || null,
-      codigo: codigoManual || codigoActual || generarCodigo(productos)
+      codigo: codigoManual || original?.codigo || generarCodigo(productos)
     }
+    // El stock NUNCA se edita desde este formulario (salvo el inicial al crear un producto nuevo):
+    // cualquier ajuste posterior tiene que pasar por la pantalla de Stock para quedar auditado.
+    if (!editId) data.stock = parseFloat(form.stock)||0
     try {
       if (editId) {
         await updateDoc(doc(db, 'productos', editId), data)
+        if (original && (data.precio !== (original.precio||0) || data.costo !== (original.costo||0))) {
+          addDoc(collection(db, 'movimientos'), {
+            productoId: editId, productoNombre: data.nombre, tipo: 'ajuste_precio',
+            precioAnterior: original.precio||0, precioNuevo: data.precio,
+            costoAnterior: original.costo||0, costoNuevo: data.costo,
+            registradoPor: user?.email || null, fecha: Timestamp.now()
+          })
+        }
         mostrarToast('✅ Producto actualizado', 'success')
       } else {
-        await addDoc(collection(db, 'productos'), data)
+        const ref = await addDoc(collection(db, 'productos'), data)
+        addDoc(collection(db, 'movimientos'), {
+          productoId: ref.id, productoNombre: data.nombre, tipo: 'alta_producto',
+          stockInicial: data.stock, unidad: data.unidad,
+          registradoPor: user?.email || null, fecha: Timestamp.now()
+        })
         mostrarToast(`✅ Producto creado — Código: ${data.codigo}`, 'success')
       }
       invalidateCache('productos')
@@ -140,7 +155,15 @@ export default function Productos() {
   async function actualizarPrecioDirecto(id, nuevoPrecio) {
     const precio = parseFloat(nuevoPrecio)
     if (isNaN(precio) || precio < 0) return
+    const anterior = productos.find(p => p.id === id)
     await updateDoc(doc(db, 'productos', id), { precio })
+    if (anterior && (anterior.precio||0) !== precio) {
+      addDoc(collection(db, 'movimientos'), {
+        productoId: id, productoNombre: anterior.nombre, tipo: 'ajuste_precio',
+        precioAnterior: anterior.precio||0, precioNuevo: precio,
+        registradoPor: user?.email || null, fecha: Timestamp.now()
+      })
+    }
     setProductos(prev => prev.map(p => p.id === id ? { ...p, precio } : p))
     mostrarToast('✅ Precio actualizado', 'success')
   }
@@ -164,6 +187,11 @@ export default function Productos() {
       const batch = writeBatch(db)
       preview.forEach(p => batch.update(doc(db, 'productos', p.id), { precio: p.nuevoPrecio }))
       await batch.commit()
+      addDoc(collection(db, 'movimientos'), {
+        tipo: 'aumento_masivo', cantidadProductos: preview.length,
+        rubro: aumentoCat, tipoAjuste: aumentoTipo, valor: parseFloat(aumentoPct)||0,
+        registradoPor: user?.email || null, fecha: Timestamp.now()
+      })
       mostrarToast(`✅ ${preview.length} productos actualizados`, 'success')
       setModalAumento(false); setAumentoPct(''); setPreview([]); cargar()
     } catch { mostrarToast('❌ Error al actualizar', 'danger') }
@@ -346,21 +374,28 @@ export default function Productos() {
                 </div>
               </div>
             )}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns: editId ? '1fr 1fr' : '1fr 1fr 1fr', gap:12 }}>
               <div className="form-group">
                 <label>Precio</label>
                 <input className="form-control" type="number" min="0" step="0.01" value={form.precio} onChange={e => setForm(f => ({...f, precio: e.target.value}))} placeholder="0" />
                 {isAdmin && <p style={{ fontSize:'0.7rem', color:'var(--muted)', marginTop:4 }}>Se calcula solo con costo + margen, o cargalo directo</p>}
               </div>
-              <div className="form-group">
-                <label>Stock actual</label>
-                <input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm(f => ({...f, stock: e.target.value}))} placeholder="0" />
-              </div>
+              {!editId && (
+                <div className="form-group">
+                  <label>Stock inicial</label>
+                  <input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm(f => ({...f, stock: e.target.value}))} placeholder="0" />
+                </div>
+              )}
               <div className="form-group">
                 <label>Stock mínimo</label>
                 <input className="form-control" type="number" min="0" value={form.stockMinimo} onChange={e => setForm(f => ({...f, stockMinimo: e.target.value}))} placeholder="0" />
               </div>
             </div>
+            {editId && (
+              <div className="alert alert-warning" style={{ marginBottom:14, fontSize:'0.8rem' }}>
+                📦 Stock actual: <strong>{form.stock} {form.unidad==='kg'?'kg':'u.'}</strong> — para modificarlo entrá a <strong>Stock</strong> (Cargar mercadería / Registrar merma), así queda quién lo hizo y por qué.
+              </div>
+            )}
             <div className="form-group">
               <label>Fecha de vencimiento (opcional)</label>
               <input className="form-control" type="date" value={form.fechaVencimiento} onChange={e => setForm(f => ({...f, fechaVencimiento: e.target.value}))} />

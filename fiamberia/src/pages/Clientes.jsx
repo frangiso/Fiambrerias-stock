@@ -3,10 +3,12 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, increment, Timestamp } f
 import { db } from '../firebase/config.js'
 import { getClientes } from '../firebase/db.js'
 import { invalidateCache } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 
 const EMPTY = { nombre: '', telefono: '' }
 
 export default function Clientes() {
+  const { isAdmin, user } = useApp()
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -37,7 +39,7 @@ export default function Clientes() {
         await updateDoc(doc(db, 'clientes', editId), { nombre: form.nombre.trim(), telefono: form.telefono.trim() })
         mostrarToast('✅ Cliente actualizado', 'success')
       } else {
-        await addDoc(collection(db, 'clientes'), { nombre: form.nombre.trim(), telefono: form.telefono.trim(), saldo: 0, fecha: Timestamp.now() })
+        await addDoc(collection(db, 'clientes'), { nombre: form.nombre.trim(), telefono: form.telefono.trim(), saldo: 0, registradoPor: user?.email || null, fecha: Timestamp.now() })
         mostrarToast('✅ Cliente creado', 'success')
       }
       invalidateCache('clientes')
@@ -62,7 +64,8 @@ export default function Clientes() {
       await updateDoc(doc(db, 'clientes', modalPago.id), { saldo: increment(-monto) })
       await addDoc(collection(db, 'caja'), {
         concepto: `Cobro cuenta corriente — ${modalPago.nombre}`, monto, tipo: 'ingreso',
-        subtipo: 'Cobro cuenta corriente', clienteId: modalPago.id, fecha: Timestamp.now()
+        subtipo: 'Cobro cuenta corriente', clienteId: modalPago.id,
+        registradoPor: user?.email || null, fecha: Timestamp.now()
       })
       invalidateCache('clientes', 'caja', 'reportes')
       setModalPago(null); setMontoPago('')
@@ -112,7 +115,7 @@ export default function Clientes() {
                           <button className="btn btn-sm btn-primary" onClick={() => { setModalPago(c); setMontoPago('') }}>💵 Registrar pago</button>
                         )}
                         <button className="btn btn-sm btn-outline" onClick={() => abrirEditar(c)}>Editar</button>
-                        <button className="btn btn-sm btn-danger" onClick={() => eliminar(c)}>Borrar</button>
+                        {isAdmin && <button className="btn btn-sm btn-danger" onClick={() => eliminar(c)}>Borrar</button>}
                       </div>
                     </td>
                   </tr>

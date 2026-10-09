@@ -3,8 +3,10 @@ import { collection, addDoc, doc, increment, Timestamp, writeBatch } from 'fireb
 import { db } from '../firebase/config.js'
 import { getProductos, getCompras } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
+import { useApp } from '../context/AppContext.jsx'
 
 export default function Compras() {
+  const { user } = useApp()
   const [productos, setProductos] = useState([])
   const [compras, setCompras] = useState([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +88,8 @@ export default function Compras() {
         const movRef = doc(collection(db, 'movimientos'))
         batch.set(movRef, {
           productoId: item.productoId, productoNombre: item.productoNombre,
-          tipo: 'carga', cantidad: item.cantidad, unidad: item.unidad, fecha: Timestamp.now()
+          tipo: 'carga', cantidad: item.cantidad, unidad: item.unidad,
+          registradoPor: user?.email || null, fecha: Timestamp.now()
         })
       }
 
@@ -94,7 +97,7 @@ export default function Compras() {
       const compraRef = doc(collection(db, 'compras'))
       batch.set(compraRef, {
         proveedor: proveedor.trim(), nroFactura: nroFactura.trim(),
-        items, total: totalCompra, fecha: Timestamp.now()
+        items, total: totalCompra, registradoPor: user?.email || null, fecha: Timestamp.now()
       })
 
       await batch.commit()
@@ -111,7 +114,8 @@ export default function Compras() {
       try {
         await addDoc(collection(db, 'caja'), {
           concepto: `Compra a ${proveedor||'proveedor'}${nroFactura?` — Fact. ${nroFactura}`:''}`,
-          monto: totalCompra, tipo:'egreso', subtipo:'Compra mercadería', fecha: Timestamp.now()
+          monto: totalCompra, tipo:'egreso', subtipo:'Compra mercadería',
+          registradoPor: user?.email || null, fecha: Timestamp.now()
         })
         invalidateCache('caja')
       } catch(e) { console.warn('No se pudo registrar en caja:', e) }

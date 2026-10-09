@@ -214,12 +214,12 @@ export default function Ventas() {
             const cantTotal = ing.cantidad * item.cantidad
             batch.update(doc(db, 'productos', ing.productoId), { stock: increment(-cantTotal) })
             const movRef = doc(collection(db, 'movimientos'))
-            batch.set(movRef, { productoId: ing.productoId, productoNombre: ing.productoNombre, tipo:'venta', cantidad: cantTotal, unidad: ing.unidad, fecha: Timestamp.now() })
+            batch.set(movRef, { productoId: ing.productoId, productoNombre: ing.productoNombre, tipo:'venta', cantidad: cantTotal, unidad: ing.unidad, registradoPor: user?.email || null, fecha: Timestamp.now() })
           }
         } else {
           batch.update(doc(db, 'productos', item.id), { stock: increment(-item.cantidad) })
           const movRef = doc(collection(db, 'movimientos'))
-          batch.set(movRef, { productoId: item.id, productoNombre: item.nombre, tipo:'venta', cantidad: item.cantidad, unidad: item.unidad, fecha: Timestamp.now() })
+          batch.set(movRef, { productoId: item.id, productoNombre: item.nombre, tipo:'venta', cantidad: item.cantidad, unidad: item.unidad, registradoPor: user?.email || null, fecha: Timestamp.now() })
         }
       }
 
