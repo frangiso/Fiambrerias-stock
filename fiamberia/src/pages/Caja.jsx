@@ -12,7 +12,7 @@ const MEDIOS_PAGO   = ['Efectivo','Tarjeta','Transferencia']
 
 export default function Caja() {
   const { verificarCaja } = useCaja()
-  const { user } = useApp()
+  const { isAdmin, user } = useApp()
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
@@ -22,7 +22,11 @@ export default function Caja() {
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [cajaCerrada, setCajaCerrada] = useState(false)
   const [montoApertura, setMontoApertura] = useState('')
+  const [reaperturaDesde, setReaperturaDesde] = useState(null)
+  const [motivoAjusteApertura, setMotivoAjusteApertura] = useState('')
   const [efectivoContado, setEfectivoContado] = useState('')
+  const [motivoDiferencia, setMotivoDiferencia] = useState('')
+  const [filtroCajero, setFiltroCajero] = useState('Todos')
 
   useEffect(() => { cargar() }, [fecha])
 
@@ -39,10 +43,29 @@ export default function Caja() {
 
   async function abrirCaja() {
     const monto = parseFloat(montoApertura) || 0
-    const nuevo = { concepto:'Apertura de caja', monto, tipo:'apertura', registradoPor: user?.email || null, fecha: Timestamp.now() }
+    // Si se reabre la caja del día, el saldo inicial tiene que coincidir con lo
+    // contado en el cierre anterior, salvo que un admin lo cambie y diga por qué —
+    // así nadie puede "resetear" una diferencia reabriendo con un número a gusto.
+    if (reaperturaDesde) {
+      const esperado = reaperturaDesde.efectivoContado || 0
+      if (monto !== esperado && !isAdmin) {
+        mostrarToast('Solo un admin puede reabrir la caja con un saldo distinto al contado en el cierre anterior', 'danger'); return
+      }
+      if (monto !== esperado && isAdmin && !motivoAjusteApertura.trim()) {
+        mostrarToast('Indicá el motivo del ajuste del saldo inicial', 'danger'); return
+      }
+    }
+    const nuevo = {
+      concepto:'Apertura de caja', monto, tipo:'apertura', registradoPor: user?.email || null, fecha: Timestamp.now(),
+      ...(reaperturaDesde ? {
+        continuacionDeCierre: reaperturaDesde.id,
+        montoEsperado: reaperturaDesde.efectivoContado || 0,
+        ...(monto !== (reaperturaDesde.efectivoContado||0) ? { motivoAjuste: motivoAjusteApertura.trim() } : {})
+      } : {})
+    }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
-    setModal(null); setMontoApertura('')
+    setModal(null); setMontoApertura(''); setReaperturaDesde(null); setMotivoAjusteApertura('')
     await cargar(true)
     verificarCaja()
     mostrarToast('✅ Caja abierta', 'success')
@@ -52,14 +75,18 @@ export default function Caja() {
     const contado = parseFloat(String(efectivoContado).replace(',','.'))
     if (isNaN(contado) || contado < 0) { mostrarToast('Ingresá el efectivo contado', 'danger'); return }
     const diferencia = contado - saldoEfectivo
+    if (diferencia !== 0 && !motivoDiferencia.trim()) {
+      mostrarToast(diferencia > 0 ? 'Indicá el motivo del sobrante' : 'Indicá el motivo del faltante', 'danger'); return
+    }
     const nuevo = {
       concepto:`Cierre de caja — Sistema: $${saldo.toLocaleString('es-AR')} · Efectivo contado: $${contado.toLocaleString('es-AR')}`,
       monto: saldo, tipo:'cierre', saldoSistema: saldo, saldoEfectivoSistema: saldoEfectivo,
-      efectivoContado: contado, diferencia, registradoPor: user?.email || null, fecha: Timestamp.now()
+      efectivoContado: contado, diferencia, motivoDiferencia: diferencia !== 0 ? motivoDiferencia.trim() : null,
+      registradoPor: user?.email || null, fecha: Timestamp.now()
     }
     await addDoc(collection(db, 'caja'), nuevo)
     invalidateCache(`caja_${fecha}`)
-    setModal(null); setEfectivoContado('')
+    setModal(null); setEfectivoContado(''); setMotivoDiferencia('')
     await cargar(true)
     verificarCaja()
     mostrarToast(diferencia === 0 ? '🔒 Caja cerrada — cuadra perfecto' : `🔒 Caja cerrada — diferencia: $${diferencia.toLocaleString('es-AR')}`, diferencia === 0 ? 'success' : 'warning')
@@ -88,6 +115,19 @@ export default function Caja() {
   const egresosEfectivo  = movimientos.filter(m => m.tipo==='egreso' && (!m.medioPago || m.medioPago==='Efectivo')).reduce((a,m) => a+m.monto, 0)
   const saldoEfectivo    = ingresosEfectivo - egresosEfectivo
 
+  // Quién hizo qué en el día — para que el admin pueda revisar por cajero
+  const cajeros = [...new Set(movimientos.map(m => m.registradoPor).filter(Boolean))]
+  const resumenPorCajero = cajeros.map(email => {
+    const movs = movimientos.filter(m => m.registradoPor === email)
+    return {
+      email,
+      ingresos: movs.filter(m => m.tipo==='ingreso'||m.tipo==='apertura').reduce((a,m) => a+m.monto, 0),
+      egresos: movs.filter(m => m.tipo==='egreso').reduce((a,m) => a+m.monto, 0),
+      cantidad: movs.length
+    }
+  })
+  const movimientosFiltrados = filtroCajero === 'Todos' ? movimientos : movimientos.filter(m => m.registradoPor === filtroCajero)
+
   function formatFecha(ts) {
     if (!ts) return '—'
     return ts.toDate().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' })
@@ -106,7 +146,13 @@ export default function Caja() {
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
             style={{ padding:'8px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:'0.88rem' }} />
           {(!cajaAbierta || cajaCerrada) && fecha === hoy && (
-            <button className="btn btn-primary" onClick={() => setModal('apertura')}>
+            <button className="btn btn-primary" onClick={() => {
+              const ultimoCierre = cajaCerrada ? movimientos[movimientos.length - 1] : null
+              setReaperturaDesde(ultimoCierre)
+              setMontoApertura(ultimoCierre ? String(ultimoCierre.efectivoContado || 0) : '')
+              setMotivoAjusteApertura('')
+              setModal('apertura')
+            }}>
               🔓 Abrir caja
             </button>
           )}
@@ -136,13 +182,42 @@ export default function Caja() {
         </div>
       </div>
 
+      {isAdmin && resumenPorCajero.length > 0 && (
+        <div className="card" style={{ marginBottom:24 }}>
+          <p style={{ fontSize:'0.75rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10 }}>Resumen por cajero — quién movió qué en el día</p>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Cajero</th><th>Movimientos</th><th>Ingresos</th><th>Egresos</th></tr></thead>
+              <tbody>
+                {resumenPorCajero.map(r => (
+                  <tr key={r.email}>
+                    <td style={{ fontWeight:600 }}>{r.email}</td>
+                    <td style={{ color:'var(--muted)' }}>{r.cantidad}</td>
+                    <td style={{ fontWeight:700, color:'var(--primary)' }}>${r.ingresos.toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+                    <td style={{ fontWeight:700, color:'var(--danger)' }}>${r.egresos.toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{ padding:0 }}>
-        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)', fontWeight:700, fontSize:'0.95rem', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)', fontWeight:700, fontSize:'0.95rem', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
           <span>Movimientos — {new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long'})}</span>
-          <button className="btn btn-outline btn-sm" onClick={() => cargar(true)}>🔄</button>
+          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+            {isAdmin && cajeros.length > 1 && (
+              <select className="form-control" style={{ fontSize:'0.82rem', padding:'6px 10px' }} value={filtroCajero} onChange={e => setFiltroCajero(e.target.value)}>
+                <option value="Todos">Todos los cajeros</option>
+                {cajeros.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <button className="btn btn-outline btn-sm" onClick={() => cargar(true)}>🔄</button>
+          </div>
         </div>
         {loading ? <div className="loading">Cargando...</div>
-        : movimientos.length === 0 ? (
+        : movimientosFiltrados.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">💰</div>
             <p>{fecha===hoy?'Abrí la caja para empezar a registrar movimientos.':'Sin movimientos este día.'}</p>
@@ -152,10 +227,14 @@ export default function Caja() {
             <table>
               <thead><tr><th>Hora</th><th>Concepto</th><th>Tipo</th><th>Medio</th><th>Registrado por</th><th>Ingreso</th><th>Egreso</th></tr></thead>
               <tbody>
-                {movimientos.map(m => (
+                {movimientosFiltrados.map(m => (
                   <tr key={m.id}>
                     <td style={{ fontFamily:'monospace', fontSize:'0.82rem', color:'var(--muted)' }}>{formatFecha(m.fecha)}</td>
-                    <td style={{ fontWeight:600 }}>{m.concepto}</td>
+                    <td style={{ fontWeight:600 }}>
+                      {m.concepto}
+                      {m.motivoDiferencia && <div style={{ fontSize:'0.72rem', color:'var(--danger)', fontWeight:500 }}>Motivo: {m.motivoDiferencia}</div>}
+                      {m.motivoAjuste && <div style={{ fontSize:'0.72rem', color:'var(--danger)', fontWeight:500 }}>Ajuste: {m.motivoAjuste}</div>}
+                    </td>
                     <td><span className="badge badge-ok" style={{ fontSize:'0.68rem' }}>{m.subtipo||m.tipo}</span></td>
                     <td style={{ fontSize:'0.8rem', color:'var(--muted)' }}>{m.medioPago || (m.tipo==='cierre'?'—':'Efectivo')}</td>
                     <td style={{ fontSize:'0.76rem', color:'var(--muted)' }}>{m.registradoPor || '—'}</td>
@@ -180,12 +259,27 @@ export default function Caja() {
               <h3 className="modal-title">🔓 Apertura de caja</h3>
               <button className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
+            {reaperturaDesde && (
+              <div className="alert alert-warning" style={{ marginBottom:14, fontSize:'0.82rem' }}>
+                🔁 Se reabre la caja del día. El saldo inicial se completa con el efectivo contado en el cierre anterior
+                {!isAdmin && ' y no se puede modificar'}.
+              </div>
+            )}
             <div className="form-group">
               <label>Saldo inicial (efectivo en caja)</label>
               <input className="form-control" type="number" min="0" value={montoApertura}
+                disabled={!!reaperturaDesde && !isAdmin}
                 onChange={e => setMontoApertura(e.target.value)}
                 placeholder="0" style={{ fontSize:'1.3rem', textAlign:'center' }} autoFocus />
             </div>
+            {reaperturaDesde && isAdmin && parseFloat(montoApertura || '0') !== (reaperturaDesde.efectivoContado || 0) && (
+              <div className="form-group">
+                <label>Motivo del ajuste (obligatorio)</label>
+                <input className="form-control" value={motivoAjusteApertura}
+                  onChange={e => setMotivoAjusteApertura(e.target.value)}
+                  placeholder="Ej: se repuso efectivo, error en el cierre anterior..." />
+              </div>
+            )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
               <button className="btn btn-primary" style={{flex:1}} onClick={abrirCaja}>Abrir caja</button>
@@ -254,9 +348,19 @@ export default function Caja() {
               (() => {
                 const dif = parseFloat(efectivoContado) - saldoEfectivo
                 return (
-                  <div className={`alert ${dif===0?'alert-success':'alert-danger'}`}>
-                    {dif===0 ? '✅ Cuadra perfecto' : dif>0 ? `⚠️ Sobran $${dif.toLocaleString('es-AR',{minimumFractionDigits:2})}` : `⚠️ Faltan $${Math.abs(dif).toLocaleString('es-AR',{minimumFractionDigits:2})}`}
-                  </div>
+                  <>
+                    <div className={`alert ${dif===0?'alert-success':'alert-danger'}`}>
+                      {dif===0 ? '✅ Cuadra perfecto' : dif>0 ? `⚠️ Sobran $${dif.toLocaleString('es-AR',{minimumFractionDigits:2})}` : `⚠️ Faltan $${Math.abs(dif).toLocaleString('es-AR',{minimumFractionDigits:2})}`}
+                    </div>
+                    {dif !== 0 && (
+                      <div className="form-group">
+                        <label>Motivo del {dif>0?'sobrante':'faltante'} (obligatorio)</label>
+                        <input className="form-control" value={motivoDiferencia}
+                          onChange={e => setMotivoDiferencia(e.target.value)}
+                          placeholder="Ej: error de vuelto, no se registró un gasto chico..." autoFocus />
+                      </div>
+                    )}
+                  </>
                 )
               })()
             )}
