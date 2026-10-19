@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { collection, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
-import { getCajaDelDia } from '../firebase/db.js'
+import { getCajaDelDia, getUltimoCierre } from '../firebase/db.js'
 import { invalidateCache } from '../firebase/cache.js'
 import { useCaja } from '../context/CajaContext.jsx'
 import { useApp } from '../context/AppContext.jsx'
@@ -72,6 +72,14 @@ export default function Caja() {
     try {
       await addDoc(collection(db, 'caja'), nuevo)
       invalidateCache(`caja_${fecha}`)
+      // Si se arrancó con un monto distinto al esperado, avisamos al admin.
+      if (nuevo.motivoAjuste) {
+        await addDoc(collection(db, 'notificaciones'), {
+          tipo: 'ajuste_apertura_caja',
+          mensaje: `${user?.email || 'Alguien'} abrió la caja con $${monto.toLocaleString('es-AR')} en vez de los $${(reaperturaDesde.efectivoContado||0).toLocaleString('es-AR')} del cierre anterior. Motivo: ${nuevo.motivoAjuste}`,
+          fecha: Timestamp.now(), leida: false, creadaPor: user?.email || null
+        })
+      }
       setModal(null); setMontoApertura(''); setReaperturaDesde(null); setMotivoAjusteApertura('')
       await cargar(true)
       verificarCaja()
@@ -99,7 +107,7 @@ export default function Caja() {
     }
     try {
       await addDoc(collection(db, 'caja'), nuevo)
-      invalidateCache(`caja_${fecha}`)
+      invalidateCache(`caja_${fecha}`, 'caja_ultimo_cierre')
       setModal(null); setEfectivoContado(''); setMotivoDiferencia('')
       await cargar(true)
       verificarCaja()
@@ -169,8 +177,12 @@ export default function Caja() {
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
             style={{ padding:'8px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:'0.88rem' }} />
           {(!cajaAbierta || cajaCerrada) && fecha === hoy && (
-            <button className="btn btn-primary" onClick={() => {
-              const ultimoCierre = cajaCerrada ? movimientos[movimientos.length - 1] : null
+            <button className="btn btn-primary" onClick={async () => {
+              // Si hoy ya se cerró, se reabre con lo contado en ese cierre.
+              // Si es un día nuevo (sin movimientos todavía), se arranca con
+              // lo contado en el último cierre registrado, sea de cuando sea.
+              let ultimoCierre = cajaCerrada ? movimientos[movimientos.length - 1] : null
+              if (!ultimoCierre) ultimoCierre = await getUltimoCierre()
               setReaperturaDesde(ultimoCierre)
               setMontoApertura(ultimoCierre ? String(ultimoCierre.efectivoContado || 0) : '')
               setMotivoAjusteApertura('')
@@ -284,7 +296,9 @@ export default function Caja() {
             </div>
             {reaperturaDesde && (
               <div className="alert alert-warning" style={{ marginBottom:14, fontSize:'0.82rem' }}>
-                🔁 Se reabre la caja del día. El saldo inicial se completa con el efectivo contado en el cierre anterior
+                {cajaCerrada
+                  ? '🔁 Se reabre la caja del día. El saldo inicial se completa con el efectivo contado en el cierre anterior'
+                  : `💰 Arrancás con el efectivo contado en el último cierre (${reaperturaDesde.fecha?.toDate ? reaperturaDesde.fecha.toDate().toLocaleDateString('es-AR') : ''})`}
                 {!isAdmin && ' y no se puede modificar'}.
               </div>
             )}

@@ -67,6 +67,22 @@ export async function getCajaDelDia(fecha, forceRefresh = false) {
   return lista
 }
 
+// ── Último cierre de caja (de cualquier día) — para arrastrar el saldo
+// al abrir un día nuevo. Se ordena por fecha sin filtrar por tipo para
+// evitar un índice compuesto en Firestore.
+export async function getUltimoCierre(forceRefresh = false) {
+  const key = 'caja_ultimo_cierre'
+  if (!forceRefresh) {
+    const cached = getCache(key)
+    if (cached) return cached
+  }
+  const snap = await getDocs(query(collection(db, 'caja'), orderBy('fecha', 'desc'), limit(20)))
+  const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const ultimo = lista.find(m => m.tipo === 'cierre') || null
+  if (ultimo) setCache(key, ultimo)
+  return ultimo
+}
+
 // ── Compras (paginadas — solo las últimas 50)
 export async function getCompras(forceRefresh = false) {
   const key = 'compras'

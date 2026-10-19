@@ -118,6 +118,21 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
 
+    // ---------------------------------------------------------------
+    // notificaciones: avisos para el admin (ej. apertura de caja con
+    // saldo distinto al cierre anterior). Cualquier usuario logueado
+    // puede crear una a su propio nombre; solo el admin puede leerlas
+    // y marcarlas como leídas.
+    // ---------------------------------------------------------------
+    match /notificaciones/{id} {
+      allow read: if esAdmin();
+      allow create: if estaLogueado()
+        && request.resource.data.creadaPor == request.auth.token.email;
+      allow update: if esAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+      allow delete: if false;
+    }
+
     // Por defecto, todo lo demás queda bloqueado.
     match /{document=**} {
       allow read, write: if false;

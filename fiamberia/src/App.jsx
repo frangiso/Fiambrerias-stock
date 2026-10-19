@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-do
 import { AppProvider, useApp } from './context/AppContext.jsx'
 import { CajaProvider } from './context/CajaContext.jsx'
 import CajaGuard from './components/CajaGuard.jsx'
+import NotificationBell from './components/NotificationBell.jsx'
 import Login from './pages/Login.jsx'
 import Ventas from './pages/Ventas.jsx'
 import Stock from './pages/Stock.jsx'
@@ -28,6 +29,7 @@ function AppInner() {
 
   return (
     <div className="app-layout">
+      <NotificationBell />
       <nav className="sidebar">
         <div className="sidebar-logo">
           <span className="logo-icon">🥩</span>
