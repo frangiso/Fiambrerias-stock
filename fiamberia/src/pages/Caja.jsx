@@ -27,6 +27,7 @@ export default function Caja() {
   const [efectivoContado, setEfectivoContado] = useState('')
   const [motivoDiferencia, setMotivoDiferencia] = useState('')
   const [filtroCajero, setFiltroCajero] = useState('Todos')
+  const [guardando, setGuardando] = useState(false)
 
   useEffect(() => { cargar() }, [fecha])
 
@@ -42,6 +43,10 @@ export default function Caja() {
   }
 
   async function abrirCaja() {
+    if (guardando) return
+    // Evita duplicar la apertura por doble clic o reintento: si ya hay una
+    // apertura registrada hoy y no estamos reabriendo a propósito, frena acá.
+    if (cajaAbierta && !reaperturaDesde) { setModal(null); return }
     const monto = parseFloat(montoApertura) || 0
     // Si se reabre la caja del día, el saldo inicial tiene que coincidir con lo
     // contado en el cierre anterior, salvo que un admin lo cambie y diga por qué —
@@ -55,6 +60,7 @@ export default function Caja() {
         mostrarToast('Indicá el motivo del ajuste del saldo inicial', 'danger'); return
       }
     }
+    setGuardando(true)
     const nuevo = {
       concepto:'Apertura de caja', monto, tipo:'apertura', registradoPor: user?.email || null, fecha: Timestamp.now(),
       ...(reaperturaDesde ? {
@@ -63,45 +69,62 @@ export default function Caja() {
         ...(monto !== (reaperturaDesde.efectivoContado||0) ? { motivoAjuste: motivoAjusteApertura.trim() } : {})
       } : {})
     }
-    await addDoc(collection(db, 'caja'), nuevo)
-    invalidateCache(`caja_${fecha}`)
-    setModal(null); setMontoApertura(''); setReaperturaDesde(null); setMotivoAjusteApertura('')
-    await cargar(true)
-    verificarCaja()
-    mostrarToast('✅ Caja abierta', 'success')
+    try {
+      await addDoc(collection(db, 'caja'), nuevo)
+      invalidateCache(`caja_${fecha}`)
+      setModal(null); setMontoApertura(''); setReaperturaDesde(null); setMotivoAjusteApertura('')
+      await cargar(true)
+      verificarCaja()
+      mostrarToast('✅ Caja abierta', 'success')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   async function cerrarCaja() {
+    if (guardando) return
+    if (cajaCerrada) { setModal(null); return }
     const contado = parseFloat(String(efectivoContado).replace(',','.'))
     if (isNaN(contado) || contado < 0) { mostrarToast('Ingresá el efectivo contado', 'danger'); return }
     const diferencia = contado - saldoEfectivo
     if (diferencia !== 0 && !motivoDiferencia.trim()) {
       mostrarToast(diferencia > 0 ? 'Indicá el motivo del sobrante' : 'Indicá el motivo del faltante', 'danger'); return
     }
+    setGuardando(true)
     const nuevo = {
       concepto:`Cierre de caja — Sistema: $${saldo.toLocaleString('es-AR')} · Efectivo contado: $${contado.toLocaleString('es-AR')}`,
       monto: saldo, tipo:'cierre', saldoSistema: saldo, saldoEfectivoSistema: saldoEfectivo,
       efectivoContado: contado, diferencia, motivoDiferencia: diferencia !== 0 ? motivoDiferencia.trim() : null,
       registradoPor: user?.email || null, fecha: Timestamp.now()
     }
-    await addDoc(collection(db, 'caja'), nuevo)
-    invalidateCache(`caja_${fecha}`)
-    setModal(null); setEfectivoContado(''); setMotivoDiferencia('')
-    await cargar(true)
-    verificarCaja()
-    mostrarToast(diferencia === 0 ? '🔒 Caja cerrada — cuadra perfecto' : `🔒 Caja cerrada — diferencia: $${diferencia.toLocaleString('es-AR')}`, diferencia === 0 ? 'success' : 'warning')
+    try {
+      await addDoc(collection(db, 'caja'), nuevo)
+      invalidateCache(`caja_${fecha}`)
+      setModal(null); setEfectivoContado(''); setMotivoDiferencia('')
+      await cargar(true)
+      verificarCaja()
+      mostrarToast(diferencia === 0 ? '🔒 Caja cerrada — cuadra perfecto' : `🔒 Caja cerrada — diferencia: $${diferencia.toLocaleString('es-AR')}`, diferencia === 0 ? 'success' : 'warning')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   async function guardarMovimiento() {
+    if (guardando) return
     const monto = parseFloat(form.monto)
     if (!monto || monto <= 0) { mostrarToast('Ingresá un monto válido', 'danger'); return }
     if (!form.concepto.trim()) { mostrarToast('Ingresá un concepto', 'danger'); return }
+    setGuardando(true)
     const nuevo = { concepto: form.concepto.trim(), monto, tipo: modal, subtipo: form.tipo, medioPago: form.medioPago, registradoPor: user?.email || null, fecha: Timestamp.now() }
-    await addDoc(collection(db, 'caja'), nuevo)
-    invalidateCache(`caja_${fecha}`, 'reportes')
-    setModal(null); setForm({ concepto:'', monto:'', tipo:'', medioPago:'Efectivo' })
-    await cargar(true)
-    mostrarToast(`✅ ${modal==='ingreso'?'Ingreso':'Egreso'} registrado`, 'success')
+    try {
+      await addDoc(collection(db, 'caja'), nuevo)
+      invalidateCache(`caja_${fecha}`, 'reportes')
+      setModal(null); setForm({ concepto:'', monto:'', tipo:'', medioPago:'Efectivo' })
+      await cargar(true)
+      mostrarToast(`✅ ${modal==='ingreso'?'Ingreso':'Egreso'} registrado`, 'success')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3000) }
@@ -282,7 +305,7 @@ export default function Caja() {
             )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" style={{flex:1}} onClick={abrirCaja}>Abrir caja</button>
+              <button className="btn btn-primary" style={{flex:1}} onClick={abrirCaja} disabled={guardando}>{guardando ? 'Abriendo...' : 'Abrir caja'}</button>
             </div>
           </div>
         </div>
@@ -320,8 +343,8 @@ export default function Caja() {
             </div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
-              <button className={`btn ${modal==='ingreso'?'btn-primary':'btn-danger'}`} style={{flex:1}} onClick={guardarMovimiento}>
-                Registrar {modal==='ingreso'?'ingreso':'egreso'}
+              <button className={`btn ${modal==='ingreso'?'btn-primary':'btn-danger'}`} style={{flex:1}} onClick={guardarMovimiento} disabled={guardando}>
+                {guardando ? 'Guardando...' : `Registrar ${modal==='ingreso'?'ingreso':'egreso'}`}
               </button>
             </div>
           </div>
@@ -366,7 +389,7 @@ export default function Caja() {
             )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" style={{flex:1}} onClick={cerrarCaja}>Confirmar cierre</button>
+              <button className="btn btn-primary" style={{flex:1}} onClick={cerrarCaja} disabled={guardando}>{guardando ? 'Cerrando...' : 'Confirmar cierre'}</button>
             </div>
           </div>
         </div>
