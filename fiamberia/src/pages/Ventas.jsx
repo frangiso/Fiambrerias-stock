@@ -461,11 +461,18 @@ export default function Ventas() {
               <h3 className="modal-title">Cantidad — {modalKg.nombre}</h3>
               <button className="modal-close" onClick={() => setModalKg(null)}>✕</button>
             </div>
-            <p className="kg-hint">Ingresá en kilos (ej: 0.350 = 350g)</p>
+            <p className="kg-hint">
+              Ingresá en kilos. 1 = 1000g · 0,500 = 500g · 0,050 = 50g · 0,005 = 5g — contá bien los ceros.
+            </p>
             <input className="form-control kg-input" type="number" step="0.001" min="0.001"
               placeholder="Ej: 0.350" value={cantidadKg}
               onChange={e => setCantidadKg(e.target.value)}
               onKeyDown={e => e.key==='Enter' && confirmarKg()} autoFocus />
+            {cantidadKg && !isNaN(parseFloat(cantidadKg.replace(',','.'))) && (
+              <p className="kg-equivalencia">
+                = {Math.round(parseFloat(cantidadKg.replace(',','.')) * 1000).toLocaleString('es-AR')} gramos
+              </p>
+            )}
             <div style={{ display:'flex', gap:10, marginTop:16 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModalKg(null)}>Cancelar</button>
               <button className="btn btn-primary" style={{flex:1}} onClick={confirmarKg}>Agregar</button>

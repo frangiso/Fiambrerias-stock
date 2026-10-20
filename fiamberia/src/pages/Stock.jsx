@@ -176,11 +176,21 @@ export default function Stock() {
             <p style={{ fontSize:'0.85rem', color:'var(--muted)', marginBottom:16 }}>Stock actual: <strong>{formatStock(modalCarga)}</strong></p>
             <div className="form-group">
               <label>Cantidad a agregar ({modalCarga.unidad==='kg'?'kg':'unidades'})</label>
+              {modalCarga.unidad==='kg' && (
+                <p style={{ fontSize:'0.78rem', color:'var(--muted)', marginBottom:6 }}>
+                  1 = 1000g · 0,500 = 500g · 0,050 = 50g — contá bien los ceros.
+                </p>
+              )}
               <input className="form-control" style={{ fontSize:'1.2rem', textAlign:'center' }}
                 type="number" step={modalCarga.unidad==='kg'?'0.1':'1'} min="0"
                 placeholder={modalCarga.unidad==='kg'?'Ej: 5.5':'Ej: 12'}
                 value={cantidadCarga} onChange={e => setCantidadCarga(e.target.value)}
                 onKeyDown={e => e.key==='Enter' && cargarStock()} autoFocus />
+              {modalCarga.unidad==='kg' && cantidadCarga && !isNaN(parseFloat(cantidadCarga.replace(',','.'))) && (
+                <p style={{ textAlign:'center', fontSize:'0.88rem', fontWeight:700, color:'var(--primary)', marginTop:6 }}>
+                  = {Math.round(parseFloat(cantidadCarga.replace(',','.')) * 1000).toLocaleString('es-AR')} gramos
+                </p>
+              )}
             </div>
             <div style={{ display:'flex', gap:10 }}>
               <button className="btn btn-outline" style={{flex:1}} onClick={() => setModalCarga(null)}>Cancelar</button>
@@ -199,10 +209,20 @@ export default function Stock() {
             <p style={{ fontSize:'0.85rem', color:'var(--muted)', marginBottom:16 }}>Stock actual: <strong>{formatStock(modalMerma)}</strong></p>
             <div className="form-group">
               <label>Cantidad a dar de baja ({modalMerma.unidad==='kg'?'kg':'unidades'})</label>
+              {modalMerma.unidad==='kg' && (
+                <p style={{ fontSize:'0.78rem', color:'var(--muted)', marginBottom:6 }}>
+                  1 = 1000g · 0,500 = 500g · 0,050 = 50g — contá bien los ceros.
+                </p>
+              )}
               <input className="form-control" style={{ fontSize:'1.2rem', textAlign:'center' }}
                 type="number" step={modalMerma.unidad==='kg'?'0.1':'1'} min="0"
                 placeholder={modalMerma.unidad==='kg'?'Ej: 1.2':'Ej: 3'}
                 value={cantidadMerma} onChange={e => setCantidadMerma(e.target.value)} autoFocus />
+              {modalMerma.unidad==='kg' && cantidadMerma && !isNaN(parseFloat(cantidadMerma.replace(',','.'))) && (
+                <p style={{ textAlign:'center', fontSize:'0.88rem', fontWeight:700, color:'var(--primary)', marginTop:6 }}>
+                  = {Math.round(parseFloat(cantidadMerma.replace(',','.')) * 1000).toLocaleString('es-AR')} gramos
+                </p>
+              )}
             </div>
             <div className="form-group">
               <label>Motivo</label>

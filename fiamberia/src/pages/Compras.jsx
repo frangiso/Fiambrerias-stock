@@ -231,7 +231,7 @@ export default function Compras() {
                           style={{ padding:'8px 12px', cursor:'pointer', fontSize:'0.85rem', borderBottom:'1px solid var(--border)' }}
                           onMouseDown={e => e.preventDefault()}
                           onClick={() => seleccionarProducto(p)}>
-                          <strong>{p.nombre}</strong> <span style={{ color:'var(--muted)' }}>· Stock: {p.stock} {p.unidad==='kg'?'kg':'u.'}</span>
+                          <strong>{p.nombre}</strong> <span style={{ color:'var(--muted)' }}>· Stock: {redondearStock(p.stock)} {p.unidad==='kg'?'kg':'u.'}</span>
                           {p.precioCompra && <span style={{ color:'var(--muted)' }}> · Último costo: ${p.precioCompra}</span>}
                         </div>
                       ))}
@@ -249,6 +249,13 @@ export default function Compras() {
                   onKeyDown={e => { if(e.key==='Enter') agregarItem() }}
                   style={{ marginBottom:0 }} />
               </div>
+              {prodSelec?.unidad==='kg' && (
+                <p style={{ fontSize:'0.75rem', color:'var(--muted)', marginBottom:8 }}>
+                  Cantidad en kilos: 1 = 1000g · 0,500 = 500g · 0,050 = 50g — contá bien los ceros.
+                  {cantItem && !isNaN(parseFloat(cantItem.replace(',','.'))) &&
+                    ` (= ${Math.round(parseFloat(cantItem.replace(',','.')) * 1000).toLocaleString('es-AR')} gramos)`}
+                </p>
+              )}
               <button className="btn btn-outline btn-sm" style={{ width:'100%' }} onClick={agregarItem}>
                 + Agregar a la compra
               </button>

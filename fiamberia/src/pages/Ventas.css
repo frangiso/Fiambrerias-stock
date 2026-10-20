@@ -223,6 +223,14 @@
   padding: 14px;
 }
 
+.kg-equivalencia {
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 8px;
+}
+
 /* TOAST */
 .toast {
   position: fixed;
