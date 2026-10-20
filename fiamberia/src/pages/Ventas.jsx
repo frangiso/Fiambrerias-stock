@@ -352,7 +352,7 @@ export default function Ventas() {
                   <div className="sug-right">
                     <span className="sug-precio">${(p.precio||0).toLocaleString('es-AR')}/{p.unidad==='kg'?'kg':'u.'}</span>
                     {p.tipo !== 'receta' && (
-                      <span className={`sug-stock ${p.stock<=(p.stockMinimo||0)?'bajo':''}`}>Stock: {p.stock}{p.unidad==='kg'?' kg':' u.'}</span>
+                      <span className={`sug-stock ${p.stock<=(p.stockMinimo||0)?'bajo':''}`}>Stock: {redondearStock(p.stock)}{p.unidad==='kg'?' kg':' u.'}</span>
                     )}
                   </div>
                 </button>
