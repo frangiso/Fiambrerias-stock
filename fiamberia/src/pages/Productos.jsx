@@ -211,6 +211,14 @@ export default function Productos() {
       mostrarToast(`⚠️ No se puede eliminar: lo usa la receta "${recetasQueLoUsan.map(r => r.nombre).join('", "')}". Quitalo de esa receta primero (en Recetas).`, 'danger')
       return
     }
+    // Si todavía queda stock, lo más probable es que lo que se quiere dar de
+    // baja sea solo una parte (ej: se venció 1 de 10 unidades) — para eso
+    // está "Registrar merma" en Stock, que descuenta cantidad sin borrar el
+    // producto. "Eliminar" acá borra el producto ENTERO para siempre.
+    if (p.stock > 0) {
+      const seguir = confirm(`"${p.nombre}" todavía tiene stock (${redondearStock(p.stock)} ${p.unidad==='kg'?'kg':'u.'}).\n\n¿Se venció/rompió SOLO UNA PARTE? Cancelá esto y usá "Registrar merma" en Stock — así descontás solo esa cantidad y el producto sigue existiendo.\n\n¿Seguro que lo que necesitás es eliminar el producto ENTERO y PARA SIEMPRE (con todo el stock)? Aceptá solo si es así.`)
+      if (!seguir) return
+    }
     const motivo = prompt(`Vas a eliminar "${p.nombre}" (stock actual: ${redondearStock(p.stock)} ${p.unidad==='kg'?'kg':'u.'}).\nEsta acción queda registrada. Indicá el motivo de la baja:`)
     if (motivo === null) return
     if (!motivo.trim()) { mostrarToast('Debés indicar un motivo para eliminar el producto', 'danger'); return }
@@ -319,7 +327,7 @@ export default function Productos() {
                     <td>
                       <div style={{ display:'flex', gap:8 }}>
                         <button className="btn btn-sm btn-outline" onClick={() => abrirEditar(p)}>Editar</button>
-                        {isAdmin && <button className="btn btn-sm btn-danger" onClick={() => eliminar(p)}>Borrar</button>}
+                        {isAdmin && <button className="btn btn-sm btn-danger" title="Elimina el producto ENTERO para siempre. ¿Se venció solo una parte? Usá 'Registrar merma' en Stock en vez de esto." onClick={() => eliminar(p)}>Borrar</button>}
                       </div>
                     </td>
                   </tr>
