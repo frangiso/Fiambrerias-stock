@@ -18,6 +18,7 @@ export default function Recetas() {
   const [ingBusqueda, setIngBusqueda] = useState('')
   const [ingCantidad, setIngCantidad] = useState('')
   const [ingSugerencias, setIngSugerencias] = useState([])
+  const [ingSeleccionado, setIngSeleccionado] = useState(null)
 
   useEffect(() => { cargar() }, [])
 
@@ -50,6 +51,7 @@ export default function Recetas() {
       ingredientes: [...f.ingredientes, {
         productoId: prod.id,
         productoNombre: prod.nombre,
+        productoCodigo: prod.codigo || null,
         cantidad: cant,
         unidad: prod.unidad
       }]
@@ -57,6 +59,7 @@ export default function Recetas() {
     setIngBusqueda('')
     setIngCantidad('')
     setIngSugerencias([])
+    setIngSeleccionado(null)
   }
 
   function quitarIngrediente(prodId) {
@@ -143,11 +146,15 @@ export default function Recetas() {
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                 <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Ingredientes</p>
                 {(r.ingredientes || []).map((ing, i) => {
-                  const existe = productos.some(p => p.id === ing.productoId)
+                  const prodActual = productos.find(p => p.id === ing.productoId)
+                  const existe = !!prodActual
+                  const codigo = prodActual?.codigo || ing.productoCodigo
                   return (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: '0.84rem' }}>
                       <span style={!existe ? { color: 'var(--danger)', fontWeight: 700 } : undefined}>
-                        {!existe && '⚠️ '}{ing.productoNombre}{!existe && ' (producto eliminado)'}
+                        {!existe && '⚠️ '}{ing.productoNombre}
+                        {codigo && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> (cód. {codigo})</span>}
+                        {!existe && ' (producto eliminado)'}
                       </span>
                       <span style={{ fontWeight: 700, color: 'var(--muted)' }}>{formatCant(ing.cantidad, ing.unidad)}</span>
                     </div>
@@ -196,7 +203,10 @@ export default function Recetas() {
                 <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
                   {form.ingredientes.map((ing, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: i < form.ingredientes.length - 1 ? '1px solid var(--border)' : 'none', fontSize: '0.86rem' }}>
-                      <span style={{ fontWeight: 600 }}>{ing.productoNombre}</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {ing.productoNombre}
+                        {ing.productoCodigo && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> (cód. {ing.productoCodigo})</span>}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ color: 'var(--muted)', fontWeight: 700 }}>{formatCant(ing.cantidad, ing.unidad)}</span>
                         <button onClick={() => quitarIngrediente(ing.productoId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '1rem' }}>✕</button>
@@ -215,7 +225,7 @@ export default function Recetas() {
                   <input
                     className="form-control"
                     value={ingBusqueda}
-                    onChange={e => setIngBusqueda(e.target.value)}
+                    onChange={e => { setIngBusqueda(e.target.value); setIngSeleccionado(null) }}
                     placeholder="Buscar producto del stock..."
                     style={{ marginBottom: 0 }}
                   />
@@ -224,10 +234,10 @@ export default function Recetas() {
                       {ingSugerencias.map(p => (
                         <div key={p.id}
                           style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.85rem', borderBottom: '1px solid var(--border)' }}
-                          onClick={() => { setIngBusqueda(p.nombre); setIngSugerencias([]) }}
+                          onClick={() => { setIngBusqueda(p.nombre); setIngSeleccionado(p); setIngSugerencias([]) }}
                           onMouseDown={e => e.preventDefault()}
                         >
-                          <strong>{p.nombre}</strong> — <span style={{ color: 'var(--muted)' }}>Stock: {p.stock} {p.unidad === 'kg' ? 'kg' : 'u.'}</span>
+                          <strong>{p.nombre}</strong> <span style={{ color: 'var(--muted)' }}>(cód. {p.codigo || '—'})</span> — <span style={{ color: 'var(--muted)' }}>Stock: {p.stock} {p.unidad === 'kg' ? 'kg' : 'u.'}</span>
                         </div>
                       ))}
                     </div>
@@ -244,13 +254,17 @@ export default function Recetas() {
                   style={{ width: 100 }}
                 />
               </div>
+              {ingSeleccionado && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 700, marginBottom: 8 }}>
+                  Seleccionado: {ingSeleccionado.nombre} (cód. {ingSeleccionado.codigo || '—'})
+                </p>
+              )}
               <button
                 className="btn btn-outline btn-sm"
                 style={{ width: '100%' }}
                 onClick={() => {
-                  const prod = productos.find(p => p.nombre.toLowerCase() === ingBusqueda.toLowerCase())
-                  if (!prod) { mostrarToast('Seleccioná un producto válido de la lista', 'danger'); return }
-                  agregarIngrediente(prod)
+                  if (!ingSeleccionado) { mostrarToast('Seleccioná un producto de la lista (hacé clic en una sugerencia)', 'danger'); return }
+                  agregarIngrediente(ingSeleccionado)
                 }}
               >
                 + Agregar ingrediente

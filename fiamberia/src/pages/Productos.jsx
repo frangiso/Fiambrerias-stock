@@ -106,6 +106,11 @@ export default function Productos() {
 
   async function guardar() {
     if (!form.nombre.trim()) { mostrarToast('El nombre es obligatorio', 'danger'); return }
+    const nombreNormalizado = form.nombre.trim().toLowerCase()
+    const duplicado = productos.find(p => p.nombre?.trim().toLowerCase() === nombreNormalizado && p.id !== editId)
+    if (duplicado) {
+      mostrarToast(`Ya existe un producto llamado "${duplicado.nombre}" (código ${duplicado.codigo}). Usá un nombre distinto o editá ese.`, 'danger'); return
+    }
     const codigoManual = form.codigo.trim()
     if (codigoManual && productos.some(p => p.codigo === codigoManual && p.id !== editId)) {
       mostrarToast(`Ya existe un producto con el código "${codigoManual}"`, 'danger'); return
