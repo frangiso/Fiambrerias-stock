@@ -163,6 +163,46 @@ export async function anularVenta(venta, motivo, usuarioEmail) {
   invalidateCache('productos', 'caja', 'reportes', 'clientes')
 }
 
+// ── Movimientos de auditoría para la pestaña "Movimientos" (filtrados por
+// rango). A diferencia de getReportes(), acá filtramos el tipo directamente
+// en Firestore con un 'in': evita leer un documento de 'movimientos' por
+// cada ÍTEM de cada venta del período (que es el grueso del volumen y que
+// esta pantalla ni siquiera muestra, porque las ventas se arman desde la
+// colección 'ventas'). Usa su propia clave de caché (reportes_audit_*) pero
+// cae dentro del mismo prefijo 'reportes' que ya se invalida en cada venta/
+// compra/movimiento de caja, así nunca queda desactualizada.
+const TIPOS_AUDITORIA = ['carga', 'merma', 'baja_producto', 'alta_producto', 'ajuste_precio', 'aumento_masivo', 'cambio_rol']
+
+export async function getMovimientosAuditoria(desde, hasta, cacheKey, forceRefresh = false) {
+  const key = `reportes_audit_${cacheKey}`
+  if (!forceRefresh) {
+    const cached = getCache(key)
+    if (cached) return cached
+  }
+  const [movSnap, venSnap, cajaSnap] = await Promise.all([
+    getDocs(query(collection(db, 'movimientos'),
+      where('fecha', '>=', desde),
+      where('fecha', '<=', hasta),
+      where('tipo', 'in', TIPOS_AUDITORIA)
+    )),
+    getDocs(query(collection(db, 'ventas'),
+      where('fecha', '>=', desde),
+      where('fecha', '<=', hasta)
+    )),
+    getDocs(query(collection(db, 'caja'),
+      where('fecha', '>=', desde),
+      where('fecha', '<=', hasta)
+    ))
+  ])
+  const result = {
+    movimientos: movSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+    ventas:      venSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+    caja:        cajaSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  }
+  setCache(key, result)
+  return result
+}
+
 // ── Reportes (filtrados por rango — con caché por clave única)
 export async function getReportes(desde, hasta, cacheKey, forceRefresh = false) {
   const key = `reportes_${cacheKey}`

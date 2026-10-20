@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Timestamp } from 'firebase/firestore'
-import { getReportes } from '../firebase/db.js'
+import { getMovimientosAuditoria } from '../firebase/db.js'
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -70,13 +70,13 @@ export default function Movimientos() {
     return { desde: Timestamp.fromDate(d7), hasta: Timestamp.fromDate(hoy), key: 'semana' }
   }
 
-  // Reusa la misma caché y las mismas consultas acotadas por rango que usa
-  // Reportes (misma clave) — si ya se visitó Reportes para el mismo período,
-  // esta pantalla no vuelve a leer Firestore.
+  // Trae solo los tipos de movimiento relevantes para auditoría (filtrado
+  // en Firestore, no en el cliente) — así no se paga una lectura por cada
+  // ítem de cada venta del período, que acá no se usa para nada.
   async function cargar(force = false) {
     setLoading(true)
     const { desde, hasta, key } = getRango()
-    const result = await getReportes(desde, hasta, key, force)
+    const result = await getMovimientosAuditoria(desde, hasta, key, force)
     setData(result)
     setLoading(false)
   }
