@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
+import { getRecetas } from '../firebase/db.js'
 import { useApp } from '../context/AppContext.jsx'
 import { redondearStock } from '../utils/numeros.js'
 
@@ -200,6 +201,16 @@ export default function Productos() {
   }
 
   async function eliminar(p) {
+    // Si el producto es ingrediente de alguna receta/combo, borrarlo rompería
+    // esa receta: al venderla, el sistema intentaría descontar stock de un
+    // producto que ya no existe y la venta fallaría entera (error
+    // "No document to update"). Se bloquea acá para que no vuelva a pasar.
+    const recetas = await getRecetas()
+    const recetasQueLoUsan = recetas.filter(r => (r.ingredientes || []).some(i => i.productoId === p.id))
+    if (recetasQueLoUsan.length > 0) {
+      mostrarToast(`⚠️ No se puede eliminar: lo usa la receta "${recetasQueLoUsan.map(r => r.nombre).join('", "')}". Quitalo de esa receta primero (en Recetas).`, 'danger')
+      return
+    }
     const motivo = prompt(`Vas a eliminar "${p.nombre}" (stock actual: ${redondearStock(p.stock)} ${p.unidad==='kg'?'kg':'u.'}).\nEsta acción queda registrada. Indicá el motivo de la baja:`)
     if (motivo === null) return
     if (!motivo.trim()) { mostrarToast('Debés indicar un motivo para eliminar el producto', 'danger'); return }

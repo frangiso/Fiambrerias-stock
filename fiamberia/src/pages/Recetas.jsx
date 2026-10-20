@@ -142,12 +142,22 @@ export default function Recetas() {
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                 <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Ingredientes</p>
-                {(r.ingredientes || []).map((ing, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: '0.84rem' }}>
-                    <span>{ing.productoNombre}</span>
-                    <span style={{ fontWeight: 700, color: 'var(--muted)' }}>{formatCant(ing.cantidad, ing.unidad)}</span>
-                  </div>
-                ))}
+                {(r.ingredientes || []).map((ing, i) => {
+                  const existe = productos.some(p => p.id === ing.productoId)
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: '0.84rem' }}>
+                      <span style={!existe ? { color: 'var(--danger)', fontWeight: 700 } : undefined}>
+                        {!existe && '⚠️ '}{ing.productoNombre}{!existe && ' (producto eliminado)'}
+                      </span>
+                      <span style={{ fontWeight: 700, color: 'var(--muted)' }}>{formatCant(ing.cantidad, ing.unidad)}</span>
+                    </div>
+                  )
+                })}
+                {(r.ingredientes || []).some(ing => !productos.some(p => p.id === ing.productoId)) && (
+                  <p style={{ fontSize: '0.74rem', color: 'var(--danger)', marginTop: 8 }}>
+                    Esta receta tiene un ingrediente de un producto que ya no existe — las ventas van a fallar hasta que lo quites y, si hace falta, agregues el reemplazo. Tocá "Editar" para corregirlo.
+                  </p>
+                )}
               </div>
             </div>
           ))}
