@@ -25,6 +25,13 @@ service cloud.firestore {
         || request.resource.data.registradoPor == request.auth.token.email;
     }
 
+    // Permite que una escritura solo toque ciertos campos. Se usa para
+    // dejar que un cajero (no-admin) descuente stock al vender o acumule
+    // saldo de un fiado, sin poder tocar precio, costo, nombre, etc.
+    function soloCambia(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
     // ---------------------------------------------------------------
     // usuarios: cada usuario puede crear (una sola vez) su propio doc
     // como 'cajero'. Ascender a admin (o degradar) solo lo puede hacer
@@ -40,25 +47,31 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // productos / rubros / recetas: cualquier usuario logueado puede
-    // leer y crear/editar (stock, precios, etc). Borrar solo admin,
-    // para evitar pérdida accidental o maliciosa de catálogo.
+    // productos: cualquier usuario logueado puede leer (lo necesita
+    // el cajero para vender). Un cajero (no-admin) solo puede tocar el
+    // campo 'stock' (lo hace una venta al descontar), nunca precio,
+    // costo ni nombre. Crear productos, editarlos a fondo o borrarlos
+    // es exclusivo de admin.
     // ---------------------------------------------------------------
     match /productos/{id} {
       allow read: if estaLogueado();
-      allow create, update: if estaLogueado() && registradoPorPropio();
+      allow create: if esAdmin() && registradoPorPropio();
+      allow update: if estaLogueado() && registradoPorPropio()
+        && (esAdmin() || soloCambia(['stock']));
       allow delete: if esAdmin();
     }
 
+    // rubros / recetas: lectura libre (el cajero necesita leer recetas
+    // para vender productos compuestos). Altas y ediciones solo admin.
     match /rubros/{id} {
       allow read: if estaLogueado();
-      allow create, update: if estaLogueado();
+      allow create, update: if esAdmin();
       allow delete: if esAdmin();
     }
 
     match /recetas/{id} {
       allow read: if estaLogueado();
-      allow create, update: if estaLogueado();
+      allow create, update: if esAdmin();
       allow delete: if esAdmin();
     }
 
@@ -99,22 +112,27 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
-    // compras: alta libre para cualquier usuario logueado. Borrar
-    // reservado a admin.
+    // compras: el cajero no gestiona compras (no tiene acceso a esa
+    // pantalla). Solo admin puede crear, editar o borrar.
     // ---------------------------------------------------------------
     match /compras/{id} {
       allow read: if estaLogueado();
-      allow create, update: if estaLogueado() && registradoPorPropio();
+      allow create, update: if esAdmin() && registradoPorPropio();
       allow delete: if esAdmin();
     }
 
     // ---------------------------------------------------------------
-    // clientes (cuenta corriente / fiado): lectura y alta/edición de
-    // saldo para cualquier usuario logueado. Borrar solo admin.
+    // clientes (cuenta corriente / fiado): lectura libre (el cajero
+    // necesita ver la lista para elegir a quién fiarle). Crear clientes
+    // nuevos o editar nombre/teléfono es solo admin. Un cajero sí puede
+    // tocar el campo 'saldo' (lo hace una venta fiada al sumar deuda).
+    // Borrar solo admin.
     // ---------------------------------------------------------------
     match /clientes/{id} {
       allow read: if estaLogueado();
-      allow create, update: if estaLogueado() && registradoPorPropio();
+      allow create: if esAdmin() && registradoPorPropio();
+      allow update: if estaLogueado() && registradoPorPropio()
+        && (esAdmin() || soloCambia(['saldo']));
       allow delete: if esAdmin();
     }
 
