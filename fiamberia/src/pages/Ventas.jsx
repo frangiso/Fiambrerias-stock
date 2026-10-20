@@ -5,6 +5,7 @@ import { db } from '../firebase/config.js'
 import { getProductos, getRecetas, getClientes } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
+import { redondearStock } from '../utils/numeros.js'
 import './Ventas.css'
 
 const MEDIOS_PAGO = ['Efectivo', 'Tarjeta', 'Transferencia', 'Fiado']
@@ -253,10 +254,10 @@ export default function Ventas() {
       // Actualizar caché de productos localmente sin re-leer Firestore
       itemsSnapshot.forEach(item => {
         if (!item.esReceta) {
-          updateCacheItem('productos', item.id, p => ({ ...p, stock: Math.max(0, p.stock - item.cantidad) }))
+          updateCacheItem('productos', item.id, p => ({ ...p, stock: redondearStock(Math.max(0, p.stock - item.cantidad)) }))
         } else {
           (item.ingredientes || []).forEach(ing => {
-            updateCacheItem('productos', ing.productoId, p => ({ ...p, stock: Math.max(0, p.stock - ing.cantidad * item.cantidad) }))
+            updateCacheItem('productos', ing.productoId, p => ({ ...p, stock: redondearStock(Math.max(0, p.stock - ing.cantidad * item.cantidad)) }))
           })
         }
       })

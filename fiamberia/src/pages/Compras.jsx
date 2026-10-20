@@ -4,6 +4,7 @@ import { db } from '../firebase/config.js'
 import { getProductos, getCompras } from '../firebase/db.js'
 import { invalidateCache, updateCacheItem } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
+import { redondearStock } from '../utils/numeros.js'
 
 export default function Compras() {
   const { user } = useApp()
@@ -105,7 +106,7 @@ export default function Compras() {
       // Actualizar caché de productos localmente
       items.forEach(item => {
         updateCacheItem('productos', item.productoId, p => ({
-          ...p, stock: p.stock + item.cantidad, precioCompra: item.costoUnitario
+          ...p, stock: redondearStock(p.stock + item.cantidad), precioCompra: item.costoUnitario
         }))
       })
       invalidateCache('compras', 'reportes')

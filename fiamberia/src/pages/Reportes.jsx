@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { getReportes, anularVenta, getProductos, getClientes } from '../firebase/db.js'
 import { useApp } from '../context/AppContext.jsx'
+import { redondearStock } from '../utils/numeros.js'
 
 function exportarCSV(filas, columnas, nombreArchivo) {
   const header = columnas.map(c => c.label).join(',')
@@ -151,7 +152,7 @@ export default function Reportes() {
         { label:'Unidad', get: p => p.unidad||'' },
         { label:'Precio', get: p => p.precio||0 },
         { label:'Costo', get: p => p.costo||0 },
-        { label:'Stock', get: p => p.stock||0 },
+        { label:'Stock', get: p => redondearStock(p.stock) },
         { label:'Stock mínimo', get: p => p.stockMinimo||0 },
         { label:'Vencimiento', get: p => p.fechaVencimiento||'' },
       ], 'backup_productos.csv')

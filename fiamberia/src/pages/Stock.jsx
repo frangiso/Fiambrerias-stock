@@ -4,6 +4,7 @@ import { db } from '../firebase/config.js'
 import { getProductos } from '../firebase/db.js'
 import { updateCacheItem } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
+import { redondearStock } from '../utils/numeros.js'
 
 export default function Stock() {
   const { user } = useApp()
@@ -71,7 +72,7 @@ export default function Stock() {
         registradoPor: user?.email || null, fecha: Timestamp.now()
       })
       // Actualizar caché sin re-leer Firestore
-      updateCacheItem('productos', modalCarga.id, p => ({ ...p, stock: p.stock + cant }))
+      updateCacheItem('productos', modalCarga.id, p => ({ ...p, stock: redondearStock(p.stock + cant) }))
       setProductos(await getProductos(false))
       mostrarToast(`✅ +${cant} ${modalCarga.unidad==='kg'?'kg':'u.'} agregado`, 'success')
       setModalCarga(null); setCantidadCarga('')
@@ -90,7 +91,7 @@ export default function Stock() {
         tipo: 'merma', cantidad: cant, unidad: modalMerma.unidad, motivo: motivoMerma.trim(),
         registradoPor: user?.email || null, fecha: Timestamp.now()
       })
-      updateCacheItem('productos', modalMerma.id, p => ({ ...p, stock: p.stock - cant }))
+      updateCacheItem('productos', modalMerma.id, p => ({ ...p, stock: redondearStock(p.stock - cant) }))
       setProductos(await getProductos(false))
       mostrarToast(`🗑️ Merma registrada: -${cant} ${modalMerma.unidad==='kg'?'kg':'u.'}`, 'warning')
       setModalMerma(null); setCantidadMerma(''); setMotivoMerma('')
@@ -98,7 +99,7 @@ export default function Stock() {
   }
 
   function mostrarToast(msg, tipo) { setToast({ msg, tipo }); setTimeout(() => setToast(null), 3000) }
-  function formatStock(p) { return p.unidad==='kg' ? `${p.stock} kg` : `${p.stock} u.` }
+  function formatStock(p) { return p.unidad==='kg' ? `${redondearStock(p.stock)} kg` : `${redondearStock(p.stock)} u.` }
 
   return (
     <div>

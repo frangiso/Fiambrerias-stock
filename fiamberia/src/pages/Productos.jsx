@@ -3,6 +3,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch, Tim
 import { db } from '../firebase/config.js'
 import { getCache, setCache, invalidateCache } from '../firebase/cache.js'
 import { useApp } from '../context/AppContext.jsx'
+import { redondearStock } from '../utils/numeros.js'
 
 const EMPTY = { nombre: '', categoria: '', precio: '', costo: '', margen: '', stock: '', stockMinimo: '', unidad: 'unidad', fechaVencimiento: '', codigoBarra: '', codigo: '' }
 
@@ -84,7 +85,7 @@ export default function Productos() {
 
   function abrirEditar(p) {
     const margenCalc = p.precio > 0 && p.costo > 0 ? (((p.precio - p.costo) / p.precio) * 100).toFixed(1) : ''
-    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', margen: margenCalc, stock: p.stock||'', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'', codigo: p.codigo||'' })
+    setForm({ nombre: p.nombre||'', categoria: p.categoria||'', precio: p.precio||'', costo: p.costo||'', margen: margenCalc, stock: p.stock ? redondearStock(p.stock) : '', stockMinimo: p.stockMinimo||'', unidad: p.unidad||'unidad', fechaVencimiento: p.fechaVencimiento||'', codigoBarra: p.codigoBarra||'', codigo: p.codigo||'' })
     setEditId(p.id); setModal(true)
   }
 
@@ -199,7 +200,7 @@ export default function Productos() {
   }
 
   async function eliminar(p) {
-    const motivo = prompt(`Vas a eliminar "${p.nombre}" (stock actual: ${p.stock} ${p.unidad==='kg'?'kg':'u.'}).\nEsta acción queda registrada. Indicá el motivo de la baja:`)
+    const motivo = prompt(`Vas a eliminar "${p.nombre}" (stock actual: ${redondearStock(p.stock)} ${p.unidad==='kg'?'kg':'u.'}).\nEsta acción queda registrada. Indicá el motivo de la baja:`)
     if (motivo === null) return
     if (!motivo.trim()) { mostrarToast('Debés indicar un motivo para eliminar el producto', 'danger'); return }
     if (!confirm(`Confirmá: eliminar "${p.nombre}" por "${motivo.trim()}"`)) return
@@ -207,7 +208,7 @@ export default function Productos() {
       await addDoc(collection(db, 'movimientos'), {
         productoId: p.id, productoNombre: p.nombre, codigo: p.codigo || null,
         categoria: p.categoria || null, precio: p.precio || 0,
-        stockFinal: p.stock || 0, unidad: p.unidad || 'unidad',
+        stockFinal: redondearStock(p.stock), unidad: p.unidad || 'unidad',
         tipo: 'baja_producto', motivo: motivo.trim(),
         registradoPor: user?.email || null, fecha: Timestamp.now()
       })
@@ -246,7 +247,7 @@ export default function Productos() {
                 { label:'Costo', get: p => p.costo||0 },
                 { label:'Margen %', get: p => p.precio>0 && p.costo>0 ? ((p.precio-p.costo)/p.precio*100).toFixed(1) : '' },
               ] : []),
-              { label:'Stock', get: p => p.stock||0 },
+              { label:'Stock', get: p => redondearStock(p.stock) },
               { label:'Stock mínimo', get: p => p.stockMinimo||0 },
               { label:'Vencimiento', get: p => p.fechaVencimiento||'' },
             ],
@@ -297,7 +298,7 @@ export default function Productos() {
                         {margenPct===null ? '—' : `${margenPct.toFixed(0)}%`}
                       </td>
                     )}
-                    <td style={{ fontWeight:700 }}>{p.stock} {p.unidad==='kg'?'kg':'u.'}</td>
+                    <td style={{ fontWeight:700 }}>{redondearStock(p.stock)} {p.unidad==='kg'?'kg':'u.'}</td>
                     <td style={{ color:'var(--muted)' }}>{p.stockMinimo||0}</td>
                     <td>
                       {p.fechaVencimiento
