@@ -12,6 +12,7 @@ import Rubros from './pages/Rubros.jsx'
 import Caja from './pages/Caja.jsx'
 import Compras from './pages/Compras.jsx'
 import Reportes from './pages/Reportes.jsx'
+import Movimientos from './pages/Movimientos.jsx'
 import Clientes from './pages/Clientes.jsx'
 import Usuarios from './pages/Usuarios.jsx'
 import './App.css'
@@ -47,6 +48,7 @@ function AppInner() {
           <NavLink to="/rubros" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🏷️</span> Rubros</NavLink>
           <NavLink to="/recetas" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🍕</span> Recetas</NavLink>
           <NavLink to="/reportes" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>📊</span> Reportes</NavLink>
+          <NavLink to="/movimientos" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>🕵️</span> Movimientos</NavLink>
           <NavLink to="/usuarios" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}><span>👤</span> Usuarios</NavLink>
         </>}
         <div style={{ marginTop:'auto', padding:'12px 0' }}>
@@ -68,6 +70,7 @@ function AppInner() {
           <Route path="/rubros" element={isAdmin ? <Rubros /> : <Navigate to="/" />} />
           <Route path="/recetas" element={isAdmin ? <Recetas /> : <Navigate to="/" />} />
           <Route path="/reportes" element={isAdmin ? <Reportes /> : <Navigate to="/" />} />
+          <Route path="/movimientos" element={isAdmin ? <Movimientos /> : <Navigate to="/" />} />
           <Route path="/usuarios" element={isAdmin ? <Usuarios /> : <Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
@@ -84,6 +87,7 @@ function AppInner() {
           <NavLink to="/rubros" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🏷️</span><small>Rubros</small></NavLink>
           <NavLink to="/recetas" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🍕</span><small>Recetas</small></NavLink>
           <NavLink to="/reportes" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>📊</span><small>Reportes</small></NavLink>
+          <NavLink to="/movimientos" className={({isActive}) => isActive ? 'bnav-item active' : 'bnav-item'}><span>🕵️</span><small>Movimientos</small></NavLink>
         </>}
       </nav>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useApp } from '../context/AppContext.jsx'
 
@@ -24,6 +24,11 @@ export default function Usuarios() {
       return
     }
     await updateDoc(doc(db, 'usuarios', u.id), { rol: nuevoRol })
+    await addDoc(collection(db, 'movimientos'), {
+      tipo: 'cambio_rol', usuarioAfectado: u.email,
+      rolAnterior: u.rol, rolNuevo: nuevoRol,
+      registradoPor: user?.email || null, fecha: Timestamp.now()
+    })
     mostrarToast('✅ Rol actualizado', 'success')
     cargar()
   }
