@@ -81,6 +81,7 @@ export default function Ventas() {
   const [nombreLocal, setNombreLocal] = useState(localStorage.getItem('nombreLocal') || 'Fiambería La Picadita')
   const [ultimaVenta, setUltimaVenta] = useState(null)
   const [medioPago, setMedioPago] = useState('Efectivo')
+  const [montoRecibido, setMontoRecibido] = useState('')
   const [descuento, setDescuento] = useState('')
   const [clienteId, setClienteId] = useState('')
   const inputRef = useRef()
@@ -175,10 +176,22 @@ export default function Ventas() {
   function calcularSubtotal() { return carrito.reduce((acc, i) => acc + (i.precio||0) * i.cantidad, 0) }
   function calcularDescuento() { return Math.min(parseFloat(descuento) || 0, calcularSubtotal()) }
   function calcularTotal() { return calcularSubtotal() - calcularDescuento() }
+  // Vuelto: solo aplica si paga en efectivo y cargaron con cuánto paga.
+  // Si lo dejan vacío se asume pago exacto (vuelto 0) — no es obligatorio.
+  function calcularVuelto() {
+    if (medioPago !== 'Efectivo' || montoRecibido === '') return 0
+    const recibido = parseFloat(String(montoRecibido).replace(',', '.'))
+    if (isNaN(recibido)) return 0
+    return Math.round((recibido - calcularTotal()) * 100) / 100
+  }
 
   async function confirmarVenta() {
     if (!carrito.length) return
     if (medioPago === 'Fiado' && !clienteId) { mostrarToast('⚠️ Elegí un cliente para el fiado', 'danger'); return }
+    const vuelto = calcularVuelto()
+    if (medioPago === 'Efectivo' && montoRecibido !== '' && vuelto < 0) {
+      mostrarToast(`⚠️ Falta $${Math.abs(vuelto).toLocaleString('es-AR',{minimumFractionDigits:2})}`, 'danger'); return
+    }
     setLoading(true)
     const subtotal = calcularSubtotal()
     const descuentoFinal = calcularDescuento()
@@ -233,6 +246,7 @@ export default function Ventas() {
         })),
         subtotal, descuento: descuentoFinal, total: totalFinal,
         medioPago, clienteId: medioPago==='Fiado' ? clienteId : null, clienteNombre: medioPago==='Fiado' ? (clienteSel?.nombre||null) : null,
+        ...(medioPago==='Efectivo' && montoRecibido!=='' ? { montoRecibido: parseFloat(String(montoRecibido).replace(',','.')), vuelto } : {}),
         registradoPor: user?.email || null, anulada: false, fecha: Timestamp.now()
       })
 
@@ -240,11 +254,15 @@ export default function Ventas() {
         // No entra efectivo a caja — se acumula como deuda del cliente
         batch.update(doc(db, 'clientes', clienteId), { saldo: increment(totalFinal) })
       } else {
-        // Caja — ingreso automático
+        // Caja — ingreso automático. El monto que entra a caja es el de la
+        // venta (totalFinal), no lo que pagó el cliente — el vuelto se
+        // descuenta del mismo cajón y el neto ya es correcto. Guardamos el
+        // vuelto solo como dato informativo para el resumen del día.
         const cajaRef = doc(collection(db, 'caja'))
         batch.set(cajaRef, {
           concepto: `Venta — ${itemsSnapshot.map(i => i.nombre).join(', ')}`,
           monto: totalFinal, tipo:'ingreso', subtipo:'Venta mostrador', medioPago, ventaId: ventaRef.id,
+          ...(medioPago==='Efectivo' && vuelto > 0 ? { vuelto } : {}),
           registradoPor: user?.email || null, fecha: Timestamp.now()
         })
       }
@@ -265,9 +283,9 @@ export default function Ventas() {
       invalidateCache('caja', 'reportes')
       if (medioPago === 'Fiado') invalidateCache('clientes')
 
-      const ventaData = { items: itemsSnapshot, subtotal, descuento: descuentoFinal, total: totalFinal, medioPago }
+      const ventaData = { items: itemsSnapshot, subtotal, descuento: descuentoFinal, total: totalFinal, medioPago, montoRecibido: medioPago==='Efectivo' && montoRecibido!=='' ? parseFloat(String(montoRecibido).replace(',','.')) : null, vuelto: medioPago==='Efectivo' ? vuelto : 0 }
       setUltimaVenta(ventaData)
-      setCarrito([]); setDescuento(''); setClienteId(''); setMedioPago('Efectivo')
+      setCarrito([]); setDescuento(''); setClienteId(''); setMedioPago('Efectivo'); setMontoRecibido('')
       // Refrescar productos (y clientes si aplica) desde caché actualizada
       setProductos(await getProductos(false))
       if (medioPago === 'Fiado') setClientes(await getClientes(false))
@@ -421,7 +439,7 @@ export default function Ventas() {
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {MEDIOS_PAGO.map(m => (
                   <button key={m} className={`btn btn-sm ${medioPago===m?'btn-primary':'btn-outline'}`}
-                    onClick={() => { setMedioPago(m); if (m!=='Fiado') setClienteId('') }}>{m}</button>
+                    onClick={() => { setMedioPago(m); if (m!=='Fiado') setClienteId(''); if (m!=='Efectivo') setMontoRecibido('') }}>{m}</button>
                 ))}
               </div>
               {medioPago === 'Fiado' && (
@@ -429,6 +447,21 @@ export default function Ventas() {
                   <option value="">Seleccioná un cliente...</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
+              )}
+              {medioPago === 'Efectivo' && (
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <label style={{ fontSize:'0.78rem', color:'var(--muted)', fontWeight:600, minWidth:70 }}>Paga con</label>
+                  <input className="form-control" type="number" min="0" step="0.01" placeholder="$ (opcional — exacto si lo dejás vacío)"
+                    value={montoRecibido} onChange={e => setMontoRecibido(e.target.value)}
+                    onKeyDown={e => e.key==='Enter' && confirmarVenta()}
+                    style={{ marginBottom:0 }} />
+                </div>
+              )}
+              {medioPago === 'Efectivo' && montoRecibido !== '' && (
+                <div className={`total-row ${calcularVuelto()<0?'':''}`} style={{ fontSize:'0.95rem', fontWeight:800, color: calcularVuelto()<0 ? 'var(--danger)' : 'var(--primary)' }}>
+                  <span>{calcularVuelto()<0?'Falta':'Vuelto'}</span>
+                  <span>${Math.abs(calcularVuelto()).toLocaleString('es-AR',{minimumFractionDigits:2})}</span>
+                </div>
               )}
             </div>
           )}

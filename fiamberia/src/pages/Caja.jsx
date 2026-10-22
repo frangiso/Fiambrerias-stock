@@ -48,35 +48,30 @@ export default function Caja() {
     // apertura registrada hoy y no estamos reabriendo a propósito, frena acá.
     if (cajaAbierta && !reaperturaDesde) { setModal(null); return }
     const monto = parseFloat(montoApertura) || 0
-    // Si se reabre la caja del día, el saldo inicial tiene que coincidir con lo
-    // contado en el cierre anterior, salvo que un admin lo cambie y diga por qué —
-    // así nadie puede "resetear" una diferencia reabriendo con un número a gusto.
-    if (reaperturaDesde) {
-      const esperado = reaperturaDesde.efectivoContado || 0
-      if (monto !== esperado && !isAdmin) {
-        mostrarToast('Solo un admin puede reabrir la caja con un saldo distinto al contado en el cierre anterior', 'danger'); return
-      }
-      if (monto !== esperado && isAdmin && !motivoAjusteApertura.trim()) {
-        mostrarToast('Indicá el motivo del ajuste del saldo inicial', 'danger'); return
-      }
-    }
+    // Antes, reabrir con un saldo distinto al contado en el cierre anterior
+    // estaba bloqueado para no-admins y exigía un motivo obligatorio. Eso
+    // trababa demasiado el día a día, así que ahora cualquiera puede ajustar
+    // el saldo inicial y el motivo es opcional (solo se guarda si lo escriben).
+    const esperado = reaperturaDesde ? (reaperturaDesde.efectivoContado || 0) : null
+    const difiere = reaperturaDesde && monto !== esperado
     setGuardando(true)
     const nuevo = {
       concepto:'Apertura de caja', monto, tipo:'apertura', registradoPor: user?.email || null, fecha: Timestamp.now(),
       ...(reaperturaDesde ? {
         continuacionDeCierre: reaperturaDesde.id,
-        montoEsperado: reaperturaDesde.efectivoContado || 0,
-        ...(monto !== (reaperturaDesde.efectivoContado||0) ? { motivoAjuste: motivoAjusteApertura.trim() } : {})
+        montoEsperado: esperado,
+        ...(difiere && motivoAjusteApertura.trim() ? { motivoAjuste: motivoAjusteApertura.trim() } : {})
       } : {})
     }
     try {
       await addDoc(collection(db, 'caja'), nuevo)
       invalidateCache(`caja_${fecha}`)
-      // Si se arrancó con un monto distinto al esperado, avisamos al admin.
-      if (nuevo.motivoAjuste) {
+      // Si se arrancó con un monto distinto al esperado, avisamos al admin
+      // (informativo — ya no bloquea la apertura).
+      if (difiere) {
         await addDoc(collection(db, 'notificaciones'), {
           tipo: 'ajuste_apertura_caja',
-          mensaje: `${user?.email || 'Alguien'} abrió la caja con $${monto.toLocaleString('es-AR')} en vez de los $${(reaperturaDesde.efectivoContado||0).toLocaleString('es-AR')} del cierre anterior. Motivo: ${nuevo.motivoAjuste}`,
+          mensaje: `${user?.email || 'Alguien'} abrió la caja con $${monto.toLocaleString('es-AR')} en vez de los $${esperado.toLocaleString('es-AR')} del cierre anterior.${nuevo.motivoAjuste ? ' Motivo: '+nuevo.motivoAjuste : ''}`,
           fecha: Timestamp.now(), leida: false, creadaPor: user?.email || null
         })
       }
@@ -95,9 +90,8 @@ export default function Caja() {
     const contado = parseFloat(String(efectivoContado).replace(',','.'))
     if (isNaN(contado) || contado < 0) { mostrarToast('Ingresá el efectivo contado', 'danger'); return }
     const diferencia = contado - saldoEfectivo
-    if (diferencia !== 0 && !motivoDiferencia.trim()) {
-      mostrarToast(diferencia > 0 ? 'Indicá el motivo del sobrante' : 'Indicá el motivo del faltante', 'danger'); return
-    }
+    // El motivo de la diferencia ya no es obligatorio para poder cerrar —
+    // queda anotado si lo escriben, pero no traba el cierre.
     setGuardando(true)
     const nuevo = {
       concepto:`Cierre de caja — Sistema: $${saldo.toLocaleString('es-AR')} · Efectivo contado: $${contado.toLocaleString('es-AR')}`,
@@ -145,6 +139,11 @@ export default function Caja() {
   const ingresosEfectivo = movimientos.filter(m => (m.tipo==='ingreso'||m.tipo==='apertura') && (!m.medioPago || m.medioPago==='Efectivo')).reduce((a,m) => a+m.monto, 0)
   const egresosEfectivo  = movimientos.filter(m => m.tipo==='egreso' && (!m.medioPago || m.medioPago==='Efectivo')).reduce((a,m) => a+m.monto, 0)
   const saldoEfectivo    = ingresosEfectivo - egresosEfectivo
+  // Transferencias del día (solo ingresos — normalmente no hay egresos por transferencia)
+  const totalTransferencias = movimientos.filter(m => m.tipo==='ingreso' && m.medioPago==='Transferencia').reduce((a,m) => a+m.monto, 0)
+  // Vuelto total dado en ventas en efectivo del día (informativo — ya está
+  // descontado del cajón, no afecta el saldo)
+  const totalVuelto = movimientos.filter(m => m.tipo==='ingreso' && m.vuelto).reduce((a,m) => a+m.vuelto, 0)
 
   // Quién hizo qué en el día — para que el admin pueda revisar por cajero
   const cajeros = [...new Set(movimientos.map(m => m.registradoPor).filter(Boolean))]
@@ -214,6 +213,21 @@ export default function Caja() {
         <div className="card" style={{ borderTop:`3px solid ${saldo>=0?'var(--primary)':'var(--danger)'}` }}>
           <div style={{ fontSize:'1.6rem', fontWeight:800, color:saldo>=0?'var(--primary)':'var(--danger)' }}>${saldo.toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
           <div style={{ fontSize:'0.75rem', color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginTop:4 }}>Saldo del día</div>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, marginBottom:24 }}>
+        <div className="card" style={{ borderTop:'3px solid var(--primary)' }}>
+          <div style={{ fontSize:'1.6rem', fontWeight:800, color:'var(--primary)' }}>${saldoEfectivo.toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
+          <div style={{ fontSize:'0.75rem', color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginTop:4 }}>Efectivo en caja</div>
+        </div>
+        <div className="card" style={{ borderTop:'3px solid var(--primary)' }}>
+          <div style={{ fontSize:'1.6rem', fontWeight:800, color:'var(--primary)' }}>${totalTransferencias.toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
+          <div style={{ fontSize:'0.75rem', color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginTop:4 }}>Transferencias del día</div>
+        </div>
+        <div className="card" style={{ borderTop:'3px solid var(--muted)' }}>
+          <div style={{ fontSize:'1.6rem', fontWeight:800, color:'var(--muted)' }}>${totalVuelto.toLocaleString('es-AR',{minimumFractionDigits:2})}</div>
+          <div style={{ fontSize:'0.75rem', color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginTop:4 }}>Vuelto dado</div>
         </div>
       </div>
 
@@ -299,19 +313,18 @@ export default function Caja() {
                 {cajaCerrada
                   ? '🔁 Se reabre la caja del día. El saldo inicial se completa con el efectivo contado en el cierre anterior'
                   : `💰 Arrancás con el efectivo contado en el último cierre (${reaperturaDesde.fecha?.toDate ? reaperturaDesde.fecha.toDate().toLocaleDateString('es-AR') : ''})`}
-                {!isAdmin && ' y no se puede modificar'}.
+                , pero podés cambiarlo si hace falta.
               </div>
             )}
             <div className="form-group">
               <label>Saldo inicial (efectivo en caja)</label>
               <input className="form-control" type="number" min="0" value={montoApertura}
-                disabled={!!reaperturaDesde && !isAdmin}
                 onChange={e => setMontoApertura(e.target.value)}
                 placeholder="0" style={{ fontSize:'1.3rem', textAlign:'center' }} autoFocus />
             </div>
-            {reaperturaDesde && isAdmin && parseFloat(montoApertura || '0') !== (reaperturaDesde.efectivoContado || 0) && (
+            {reaperturaDesde && parseFloat(montoApertura || '0') !== (reaperturaDesde.efectivoContado || 0) && (
               <div className="form-group">
-                <label>Motivo del ajuste (obligatorio)</label>
+                <label>Motivo del ajuste (opcional)</label>
                 <input className="form-control" value={motivoAjusteApertura}
                   onChange={e => setMotivoAjusteApertura(e.target.value)}
                   placeholder="Ej: se repuso efectivo, error en el cierre anterior..." />
@@ -391,7 +404,7 @@ export default function Caja() {
                     </div>
                     {dif !== 0 && (
                       <div className="form-group">
-                        <label>Motivo del {dif>0?'sobrante':'faltante'} (obligatorio)</label>
+                        <label>Motivo del {dif>0?'sobrante':'faltante'} (opcional)</label>
                         <input className="form-control" value={motivoDiferencia}
                           onChange={e => setMotivoDiferencia(e.target.value)}
                           placeholder="Ej: error de vuelto, no se registró un gasto chico..." autoFocus />
