@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext.jsx'
 import { CajaProvider } from './context/CajaContext.jsx'
 import CajaGuard from './components/CajaGuard.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
+import Suspendido, { useEstadoSistema } from './components/Suspendido.jsx'
 import Login from './pages/Login.jsx'
 import Ventas from './pages/Ventas.jsx'
 import Stock from './pages/Stock.jsx'
@@ -19,6 +20,11 @@ import './App.css'
 
 function AppInner() {
   const { user, authLoading, logout, isAdmin } = useApp()
+  const sistema = useEstadoSistema()
+
+  // Suspensión total: va antes que todo (login incluido) y aplica a todos,
+  // admin también. Se levanta cambiando public/estado.json.
+  if (sistema.suspendido) return <Suspendido mensaje={sistema.mensaje} />
 
   if (authLoading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#F0EDE6' }}>
